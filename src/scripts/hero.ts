@@ -178,7 +178,9 @@ export async function mountHero(section: HTMLElement) {
     pointerY += (targetY - pointerY) * Math.min(delta * STAGE_RESPONSE * 2, 1);
 
     // Velocidad del scroll en pantallas por segundo, con signo.
-    const speed = delta > 0 ? (window.scrollY - lastScrollY) / delta / window.innerHeight : 0;
+    // Una ventana sin altura (minimizada, iframe oculto) no puede medir velocidad.
+    const screen = window.innerHeight;
+    const speed = delta > 0 && screen > 0 ? (window.scrollY - lastScrollY) / delta / screen : 0;
     lastScrollY = window.scrollY;
     sway += (clamp(speed / SWAY_FULL, -1, 1) - sway) * Math.min(delta * SWAY_RESPONSE, 1);
     if (speed === 0 && Math.abs(sway) < 0.001) sway = 0;
@@ -251,6 +253,8 @@ export async function mountHero(section: HTMLElement) {
   document.addEventListener("visibilitychange", () => (document.hidden ? pause() : play()));
   reducedMotion.addEventListener("change", () => {
     pause();
+    force = 0;
+    sway = 0;
     section.toggleAttribute("data-settled", reducedMotion.matches);
     if (ready) draw();
     play();
