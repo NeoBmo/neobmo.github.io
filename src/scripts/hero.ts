@@ -11,8 +11,12 @@ import {
   LOGO_AT,
   LOGO_SCROLL,
   MAX_RATE,
+  POINTER_HOLD_MS,
+  POINTER_RESPONSE,
   RATE_RESPONSE,
   STAGE_RESPONSE,
+  SWAY_FULL,
+  SWAY_RESPONSE,
   afterLogo,
   stageAt,
 } from "../lib/choreography";
@@ -74,6 +78,17 @@ export async function mountHero(section: HTMLElement) {
   // `position` porque también debe actuar si alguien baja durante la intro.
   let veil = 0;
   let drawnVeil = -1;
+  // El visitante altera el lienzo: `force` crece mientras mueve el puntero o toca,
+  // y `sway` sigue a la velocidad del scroll. Ambos vuelven solos a cero.
+  let pointerX = 0;
+  let pointerY = 0;
+  let targetX = 0;
+  let targetY = 0;
+  let lastPointer = -Infinity;
+  let force = 0;
+  let sway = 0;
+  let lastScrollY = 0;
+  let drawnStirred = false;
   // La intro mantiene el logo hasta que el visitante baja; desde ahí manda el scroll,
   // así que al volver arriba la pintura se queda quieta y no se disuelve sola.
   let introHolds = true;
@@ -89,7 +104,9 @@ export async function mountHero(section: HTMLElement) {
   const draw = () => {
     drawnPosition = position;
     drawnVeil = veil;
+    drawnStirred = force > 0 || sway !== 0;
     if (reducedMotion.matches) return scene.render(elapsed, true);
+    scene.disturb(pointerX, pointerY, force, sway);
     if (position > 1) scene.renderFormation(position - 1, elapsed);
     else scene.render(elapsed, false, position);
     if (veil > 0) scene.dim(lerp(1, HORIZON_ALPHA, veil));
@@ -153,10 +170,28 @@ export async function mountHero(section: HTMLElement) {
     veil += (horizon - veil) * Math.min(delta * STAGE_RESPONSE, 1);
     if (Math.abs(horizon - veil) < 0.001) veil = horizon;
 
-    if (position === drawnPosition && veil === drawnVeil) {
+    const stirring = now - lastPointer < POINTER_HOLD_MS;
+    force += ((stirring ? 1 : 0) - force) * Math.min(delta * POINTER_RESPONSE, 1);
+    if (!stirring && force < 0.001) force = 0;
+    // El hueco persigue al puntero en vez de saltar con él.
+    pointerX += (targetX - pointerX) * Math.min(delta * STAGE_RESPONSE * 2, 1);
+    pointerY += (targetY - pointerY) * Math.min(delta * STAGE_RESPONSE * 2, 1);
+
+    // Velocidad del scroll en pantallas por segundo, con signo.
+    const speed = delta > 0 ? (window.scrollY - lastScrollY) / delta / window.innerHeight : 0;
+    lastScrollY = window.scrollY;
+    sway += (clamp(speed / SWAY_FULL, -1, 1) - sway) * Math.min(delta * SWAY_RESPONSE, 1);
+    if (speed === 0 && Math.abs(sway) < 0.001) sway = 0;
+    const stirred = force > 0 || sway !== 0;
+
+    // Mientras el visitante lo altera, o justo después, hay que redibujar aunque
+    // la figura no haya cambiado.
+    if (position === drawnPosition && veil === drawnVeil && !stirred && !drawnStirred) {
       if (position >= 1) {
-        // Figura quieta y en su destino: el bucle se detiene hasta el próximo scroll.
-        if (position === target && veil === horizon) pause();
+        // Figura quieta y en su destino: el bucle se detiene hasta el próximo gesto.
+        // El primer fotograma tras reanudar no mide tiempo: se espera al siguiente
+        // para que el gesto que lo despertó llegue a notarse.
+        if (position === target && veil === horizon && delta > 0 && !stirring) pause();
         return;
       }
       const idleFrameMs = portrait.matches ? PORTRAIT_IDLE_FRAME_MS : IDLE_FRAME_MS;
@@ -171,6 +206,8 @@ export async function mountHero(section: HTMLElement) {
   const play = () => {
     if (frame || !ready || reducedMotion.matches || document.hidden) return;
     lastFrame = 0;
+    // El scroll hecho con el bucle parado no cuenta como velocidad.
+    lastScrollY = window.scrollY;
     frame = requestAnimationFrame(tick);
   };
 
@@ -186,6 +223,22 @@ export async function mountHero(section: HTMLElement) {
   });
 
   section.toggleAttribute("data-settled", reducedMotion.matches);
+
+  // Un solo camino para ratón, lápiz y dedo. Reacciona al movimiento, no a la
+  // presencia: un puntero quieto no deja un hueco y el bucle puede detenerse.
+  const stir = (event: PointerEvent) => {
+    if (reducedMotion.matches) return;
+    targetX = event.clientX;
+    targetY = event.clientY;
+    if (force === 0) {
+      pointerX = targetX;
+      pointerY = targetY;
+    }
+    lastPointer = performance.now();
+    play();
+  };
+  addEventListener("pointermove", stir, { passive: true });
+  addEventListener("pointerdown", stir, { passive: true });
 
   // Los observadores van antes del primer dibujo: si el lienzo aún no tiene tamaño,
   // serán ellos quienes lo dibujen cuando lo tenga.

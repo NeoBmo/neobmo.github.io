@@ -42,6 +42,14 @@ const LINE_GLYPH = glyphFor(0.5, 0, 1);
 const EXIT_LINE_TOP = 0.8;
 const HORIZON_TOP = 0.08;
 
+/** Radio de la perturbación del puntero, en alturas de celda, y cuánto empuja. */
+const POINTER_RADIUS = 6;
+const POINTER_PUSH = 0.3;
+/** Desde esta intensidad el carácter empujado vuelve a ser ruido. */
+const POINTER_NOISE = 0.35;
+/** Celdas que arrastra el scroll a máxima velocidad. */
+const SWAY_CELLS = 1.6;
+
 /** Una figura hecha de caracteres: el carácter `order[j]` va a la posición `j`. */
 interface Formation {
   x: Float32Array;
@@ -107,6 +115,12 @@ export class Convergence {
   private fade = new Float32Array(0);
   private order = new Uint32Array(0);
   private formations: Formation[] = [];
+  private pointerX = 0;
+  private pointerY = 0;
+  private force = 0;
+  private sway = 0;
+  private pushX = 0;
+  private pushY = 0;
 
   constructor({ canvas, fontFamily, seed = 1890 }: ConvergenceOptions) {
     const context = canvas.getContext("2d");
@@ -155,6 +169,17 @@ export class Convergence {
   }
 
   /**
+   * Fija cómo altera el visitante el próximo dibujo: `force` (0–1) aparta los
+   * caracteres del puntero y `sway` (-1 a 1) los arrastra con el scroll.
+   */
+  disturb(pointerX: number, pointerY: number, force: number, sway: number) {
+    this.pointerX = pointerX;
+    this.pointerY = pointerY;
+    this.force = force;
+    this.sway = sway;
+  }
+
+  /**
    * Dibuja el viaje entre formaciones. `stage` 1.5 es la mitad del camino entre
    * la formación 1 y la 2, así que el scroll puede moverla en ambos sentidos.
    */
@@ -173,6 +198,7 @@ export class Convergence {
 
     const flicker = Math.floor(time * 12);
     const total = Math.max(start.size, end.size);
+    const stirred = this.force > 0 || this.sway !== 0;
 
     for (let j = 0; j < total; j++) {
       const n = order[j];
@@ -205,6 +231,14 @@ export class Convergence {
         scale = end.scale;
       }
 
+      if (stirred) {
+        // Las figuras no tienen pincelada: el scroll las arrastra en vertical.
+        const strength = this.pushAt(x, y, n, 0, -1);
+        x += this.pushX;
+        y += this.pushY;
+        if (strength > POINTER_NOISE) glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
+      }
+
       const drawWidth = cellWidth * scale;
       const drawHeight = cellHeight * scale;
       context.drawImage(
@@ -235,6 +269,7 @@ export class Convergence {
     const halfW = cellWidth / 2;
     const halfH = cellHeight / 2;
     const flicker = Math.floor(time * 12);
+    const stirred = !still && (this.force > 0 || this.sway !== 0);
 
     for (let i = 0; i < this.count; i++) {
       if (t < this.appear[i]) continue;
@@ -268,6 +303,14 @@ export class Convergence {
             : NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
       }
 
+      if (stirred) {
+        // La pintura se corre a lo largo de su pincelada, como si el scroll moviera el pincel.
+        const strength = this.pushAt(x, y, i, this.dirX[i], this.dirY[i]);
+        x += this.pushX;
+        y += this.pushY;
+        if (strength > POINTER_NOISE) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
+      }
+
       if (glyph === EMPTY) continue;
       context.drawImage(
         atlas.canvas,
@@ -282,6 +325,31 @@ export class Convergence {
       context.imageSmoothingEnabled = true;
       context.drawImage(this.colorLayer, this.gridX, this.gridY, this.cols * cellWidth, this.rows * cellHeight);
     }
+  }
+
+  /**
+   * Calcula en `pushX`/`pushY` cuánto se mueve el carácter `n`, que está en (x, y):
+   * el scroll lo arrastra sobre el eje dado y el puntero lo aparta. Devuelve la
+   * intensidad del puntero sobre él, de 0 a 1.
+   */
+  private pushAt(x: number, y: number, n: number, axisX: number, axisY: number) {
+    const { cellWidth, cellHeight } = this.atlas;
+    const drift = this.sway * (0.4 + this.noise[n]) * cellWidth * SWAY_CELLS;
+    this.pushX = axisX * drift;
+    this.pushY = axisY * drift;
+    if (this.force <= 0) return 0;
+
+    const radius = cellHeight * POINTER_RADIUS;
+    const dx = x - this.pointerX;
+    const dy = y - this.pointerY;
+    const distance = Math.hypot(dx, dy);
+    if (distance >= radius) return 0;
+
+    const strength = (1 - distance / radius) ** 2 * this.force;
+    const reach = (radius * POINTER_PUSH * strength) / Math.max(distance, 1);
+    this.pushX += dx * reach;
+    this.pushY += dy * reach;
+    return strength;
   }
 
   /** Atenúa lo ya dibujado, sea pintura o figura, para que el texto de encima se lea. */

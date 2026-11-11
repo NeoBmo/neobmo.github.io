@@ -17,6 +17,15 @@ export const STAGE_RESPONSE = 8;
 
 /** Pantallas de scroll, tras el hero, que tarda la línea en subir a horizonte. */
 export const HORIZON_SCROLL = 0.6;
+/** Milisegundos que el puntero sigue empujando después de su último movimiento. */
+export const POINTER_HOLD_MS = 180;
+/** Qué tan rápido crece y se apaga el empuje del puntero, por segundo. */
+export const POINTER_RESPONSE = 6;
+/** Pantallas por segundo de scroll que dan el arrastre máximo. */
+export const SWAY_FULL = 3;
+/** Qué tan rápido el arrastre sigue a la velocidad del scroll, por segundo. */
+export const SWAY_RESPONSE = 7;
+
 /** Opacidad del lienzo cuando hay texto encima. */
 export const HORIZON_ALPHA = 0.4;
 
