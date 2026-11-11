@@ -1,7 +1,7 @@
 import type { ImageField } from "./image-field";
 import { createGlyphAtlas, type GlyphAtlas } from "./glyph-atlas";
 import { GLYPH_STRIDE, createGlyphRenderer, type GlyphRenderer } from "./glyph-renderer";
-import { EMPTY, NOISE_INDEX, glyphFor } from "./glyphs";
+import { EMPTY, LOGO_INDEX, NOISE_INDEX, glyphFor } from "./glyphs";
 import { clamp, createRandom, easeInOutCubic, easeOutCubic, lerp, smoothstep } from "./math";
 
 /**
@@ -34,7 +34,12 @@ const LOGO_TOP = 0.42;
 const LOGO_TRAVEL = 0.6;
 /** Curvatura del viaje: sale siguiendo su pincelada antes de ir al logo. */
 const LOGO_ARC = 0.25;
-const LOGO_GLYPH = glyphFor(1, 0, 0);
+/**
+ * El logo es «\|°». Hasta estas fracciones de su ancho llegan la barra inclinada
+ * y la barra vertical; el resto es el círculo.
+ */
+const LOGO_SLASH_END = 0.42;
+const LOGO_BAR_END = 0.6;
 const LINE_GLYPH = glyphFor(0.5, 0, 1);
 
 /** Altura de la línea de salida del hero y del horizonte que queda tras él. */
@@ -54,7 +59,8 @@ interface Formation {
   x: Float32Array;
   y: Float32Array;
   size: number;
-  glyph: number;
+  /** Carácter de cada posición. */
+  glyph: Uint8Array;
   /** Tamaño de cada carácter respecto a su celda. */
   scale: number;
 }
@@ -113,6 +119,7 @@ export class Convergence {
   private inLogo = new Uint8Array(0);
   private logoX = new Float32Array(0);
   private logoY = new Float32Array(0);
+  private logoGlyph = new Uint8Array(0);
   private logoDelay = new Float32Array(0);
   private fade = new Float32Array(0);
   private order = new Uint32Array(0);
@@ -230,20 +237,20 @@ export class Convergence {
         x = lerp(start.x[j], end.x[j], local);
         y = lerp(start.y[j], end.y[j], local);
         scale = lerp(start.scale, end.scale, local);
-        if (local < 0.1) glyph = start.glyph;
-        else if (local > 0.9) glyph = end.glyph;
+        if (local < 0.1) glyph = start.glyph[j];
+        else if (local > 0.9) glyph = end.glyph[j];
         else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
       } else if (inStart) {
         if (mix > this.fade[n]) continue;
         x = start.x[j];
         y = start.y[j];
-        glyph = start.glyph;
+        glyph = start.glyph[j];
         scale = start.scale;
       } else {
         if (mix < 1 - this.fade[n]) continue;
         x = end.x[j];
         y = end.y[j];
-        glyph = end.glyph;
+        glyph = end.glyph[j];
         scale = end.scale;
       }
 
@@ -298,7 +305,7 @@ export class Convergence {
         y = this.atY;
         glyph =
           toLogo > 0.9
-            ? LOGO_GLYPH
+            ? this.logoGlyph[i]
             : NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
       } else if (progress >= 1) {
         const wave = life > 0 ? Math.sin(this.phase[i] - time * 1.4) * life : 0;
@@ -502,6 +509,7 @@ export class Convergence {
     this.inLogo = new Uint8Array(count);
     this.logoX = new Float32Array(count);
     this.logoY = new Float32Array(count);
+    this.logoGlyph = new Uint8Array(count);
     this.logoDelay = new Float32Array(count);
     this.fade = new Float32Array(count);
 
@@ -529,6 +537,7 @@ export class Convergence {
       this.inLogo[n] = 1;
       this.logoX[n] = logoShape.x[j];
       this.logoY[n] = logoShape.y[j];
+      this.logoGlyph[n] = logoShape.glyph[j];
     }
   }
 
@@ -553,7 +562,7 @@ export class Convergence {
     const x = new Float32Array(size);
     const y = new Float32Array(size).fill(height * topRatio);
     for (let j = 0; j < size; j++) x[j] = this.gridX + (j + 0.5) * cellWidth;
-    return { x, y, size, glyph: LINE_GLYPH, scale: 1 };
+    return { x, y, size, glyph: new Uint8Array(size).fill(LINE_GLYPH), scale: 1 };
   }
 
   /** Convierte en celdas lo que `draw` pinta en una capa del tamaño de la figura. */
@@ -580,6 +589,7 @@ export class Convergence {
     const top = (height - rows * cellHeight) * topRatio;
     const x = new Float32Array(count);
     const y = new Float32Array(count);
+    const glyph = new Uint8Array(count);
     let size = 0;
 
     for (let row = 0; row < rows; row++) {
@@ -587,11 +597,14 @@ export class Convergence {
         if (data[(row * cols + col) * 4 + 3] < 128) continue;
         x[size] = left + (col + 0.5) * cellWidth;
         y[size] = top + (row + 0.5) * cellHeight;
+        // Cada trazo del logo se escribe con el carácter que representa.
+        const across = (col + 0.5) / cols;
+        glyph[size] = LOGO_INDEX[across < LOGO_SLASH_END ? 0 : across < LOGO_BAR_END ? 1 : 2];
         size++;
       }
     }
 
-    return { x, y, size, glyph: LOGO_GLYPH, scale };
+    return { x, y, size, glyph, scale };
   }
 
   /** Deja en `atX`/`atY` el punto del viaje de la pintura al logo. */
@@ -639,7 +652,7 @@ const emptyFormation = (): Formation => ({
   x: new Float32Array(0),
   y: new Float32Array(0),
   size: 0,
-  glyph: LOGO_GLYPH,
+  glyph: new Uint8Array(0),
   scale: 1,
 });
 
