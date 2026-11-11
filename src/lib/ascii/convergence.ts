@@ -19,8 +19,6 @@ const TIMING = {
   lifeDuration: 2.5,
 };
 
-export const INTRO_DURATION = TIMING.colorStart + TIMING.colorDuration;
-
 /** Points per journey: a random origin, then a stroke that ends at home. */
 const STROKE_STEPS = 18;
 const POINTS = STROKE_STEPS + 2;
@@ -121,6 +119,10 @@ export class Convergence {
   private sway = 0;
   private pushX = 0;
   private pushY = 0;
+  // Las posiciones se devuelven aquí y no en un array: un objeto por carácter y
+  // fotograma obliga al navegador a limpiar memoria a mitad de la animación.
+  private atX = 0;
+  private atY = 0;
 
   constructor({ canvas, fontFamily, seed = 1890 }: ConvergenceOptions) {
     const context = canvas.getContext("2d");
@@ -137,6 +139,8 @@ export class Convergence {
     pixelRatio: number,
     painting: Painting,
     logo: HTMLImageElement,
+    /** Agranda los caracteres: menos que dibujar en equipos que no llegan. */
+    glyphScale = 1,
   ) {
     this.field = painting.field;
     this.focus = painting.focus;
@@ -147,7 +151,7 @@ export class Convergence {
     this.canvas.height = Math.round(height * pixelRatio);
 
     // Menos de 10.5 px satura las pantallas pequeñas: más caracteres que dibujar y menos pintura.
-    const fontSize = Math.round(clamp(width / 120, 10.5, 14) * 2) / 2;
+    const fontSize = Math.round(clamp(width / 120, 10.5, 14) * glyphScale * 2) / 2;
     this.atlas = createGlyphAtlas(fontSize, pixelRatio, this.fontFamily);
     const { cellWidth, cellHeight } = this.atlas;
 
@@ -284,7 +288,9 @@ export class Convergence {
       let glyph: number;
 
       if (toLogo > 0) {
-        [x, y] = this.logoPositionAt(i, toLogo);
+        this.logoPositionAt(i, toLogo);
+        x = this.atX;
+        y = this.atY;
         glyph =
           toLogo > 0.9
             ? LOGO_GLYPH
@@ -296,7 +302,9 @@ export class Convergence {
         y = this.homeY[i] + this.dirY[i] * drift;
         glyph = glyphFor(this.luminance[i] + wave * 0.09 * this.coherence[i], this.angle[i], this.coherence[i]);
       } else {
-        [x, y] = this.positionAt(i, progress);
+        this.positionAt(i, progress);
+        x = this.atX;
+        y = this.atY;
         glyph =
           progress > 0.9
             ? glyphFor(this.luminance[i], this.angle[i], this.coherence[i])
@@ -342,9 +350,10 @@ export class Convergence {
     const radius = cellHeight * POINTER_RADIUS;
     const dx = x - this.pointerX;
     const dy = y - this.pointerY;
-    const distance = Math.hypot(dx, dy);
-    if (distance >= radius) return 0;
+    const squared = dx * dx + dy * dy;
+    if (squared >= radius * radius) return 0;
 
+    const distance = Math.sqrt(squared);
     const strength = (1 - distance / radius) ** 2 * this.force;
     const reach = (radius * POINTER_PUSH * strength) / Math.max(distance, 1);
     this.pushX += dx * reach;
@@ -589,34 +598,37 @@ export class Convergence {
     return { x, y, size, glyph: LOGO_GLYPH, scale };
   }
 
-  private logoPositionAt(n: number, progress: number): [number, number] {
+  /** Deja en `atX`/`atY` el punto del viaje de la pintura al logo. */
+  private logoPositionAt(n: number, progress: number) {
     const startX = this.homeX[n];
     const startY = this.homeY[n];
     const endX = this.logoX[n];
     const endY = this.logoY[n];
-    const distance = Math.hypot(endX - startX, endY - startY);
+    const distance = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
     const controlX = (startX + endX) / 2 + this.dirX[n] * distance * LOGO_ARC;
     const controlY = (startY + endY) / 2 + this.dirY[n] * distance * LOGO_ARC;
-    return [
-      lerp(lerp(startX, controlX, progress), lerp(controlX, endX, progress), progress),
-      lerp(lerp(startY, controlY, progress), lerp(controlY, endY, progress), progress),
-    ];
+    this.atX = lerp(lerp(startX, controlX, progress), lerp(controlX, endX, progress), progress);
+    this.atY = lerp(lerp(startY, controlY, progress), lerp(controlY, endY, progress), progress);
   }
 
-  private positionAt(n: number, progress: number): [number, number] {
+  /** Deja en `atX`/`atY` el punto del viaje del ruido a la pintura. */
+  private positionAt(n: number, progress: number) {
     const base = n * POINTS * 2;
     const path = this.path;
 
     if (progress < SWEEP) {
       const t = easeOutCubic(progress / SWEEP);
-      return [lerp(path[base], path[base + 2], t), lerp(path[base + 1], path[base + 3], t)];
+      this.atX = lerp(path[base], path[base + 2], t);
+      this.atY = lerp(path[base + 1], path[base + 3], t);
+      return;
     }
 
     const along = ((progress - SWEEP) / (1 - SWEEP)) * (POINTS - 2);
     const segment = Math.min(Math.floor(along), POINTS - 3);
     const t = along - segment;
     const a = base + (segment + 1) * 2;
-    return [lerp(path[a], path[a + 2], t), lerp(path[a + 1], path[a + 3], t)];
+    this.atX = lerp(path[a], path[a + 2], t);
+    this.atY = lerp(path[a + 1], path[a + 3], t);
   }
 
   private fieldIndex(x: number, y: number) {

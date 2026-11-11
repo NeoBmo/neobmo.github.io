@@ -2,7 +2,7 @@ import landscapeUrl from "../assets/starry-night.webp?url";
 import portraitUrl from "../assets/starry-night-portrait.webp?url";
 import logoUrl from "../assets/logo.svg?url";
 import { loadImageField, type ImageField } from "../lib/ascii/image-field";
-import { Convergence, INTRO_DURATION, type Painting } from "../lib/ascii/convergence";
+import { Convergence, type Painting } from "../lib/ascii/convergence";
 import { clamp, lerp } from "../lib/ascii/math";
 import {
   DISSOLVE_DURATION,
@@ -23,12 +23,48 @@ import {
 import { mountTerminal } from "./terminal";
 
 const FONT_FAMILY = '"JetBrains Mono", monospace';
-/** After the intro the painting only breathes, so 30 fps is plenty. */
-const IDLE_FRAME_MS = 1000 / 30;
-/** Los teléfonos reciben menos fotogramas y píxeles: su pantalla ya es densa. */
-const PORTRAIT_IDLE_FRAME_MS = 1000 / 20;
+/** Los teléfonos reciben menos píxeles: su pantalla ya es densa. */
 const MAX_PIXEL_RATIO = 2;
 const PORTRAIT_MAX_PIXEL_RATIO = 1.5;
+/**
+ * Niveles de calidad. Si el equipo no llega, cada nivel agranda los caracteres
+ * (menos que mover) y reduce los píxeles; la figura y la coreografía no cambian.
+ */
+const QUALITY = [
+  { glyphScale: 1, maxPixelRatio: Infinity },
+  { glyphScale: 1.2, maxPixelRatio: 1.25 },
+  { glyphScale: 1.45, maxPixelRatio: 1 },
+];
+/**
+ * Dibujar no debe pasar de este tiempo medio: deja libre parte del fotograma de
+ * 60 fps (16,7 ms), porque después el navegador aún tiene que pintarlo.
+ */
+const DRAW_BUDGET_MS = 10;
+const QUALITY_WINDOW = 30;
+/** Los primeros dibujos tras cargar o cambiar de nivel son lentos sin que el equipo lo sea. */
+const QUALITY_WARMUP = 20;
+/** Una ventana lenta puede ser casualidad (fuentes cargando); dos seguidas, no. */
+const SLOW_WINDOWS = 2;
+const QUALITY_KEY = "backdrop-quality";
+
+/** El nivel se recuerda por navegador: la siguiente visita no vuelve a medir desde arriba. */
+function storedQuality() {
+  try {
+    const level = Number(localStorage.getItem(QUALITY_KEY));
+    return Number.isInteger(level) ? clamp(level, 0, QUALITY.length - 1) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function storeQuality(level: number) {
+  try {
+    localStorage.setItem(QUALITY_KEY, String(level));
+  } catch {
+    // Sin almacenamiento (modo privado), cada visita vuelve a medir.
+  }
+}
+
 /** Below this aspect ratio the vertical composition fits better. */
 const PORTRAIT_QUERY = "(max-aspect-ratio: 6/7)";
 
@@ -65,7 +101,6 @@ export async function mountHero(section: HTMLElement) {
 
   let elapsed = 0;
   let lastFrame = 0;
-  let lastDraw = 0;
   let frame = 0;
   let rate = 1;
   let progress = 0;
@@ -96,6 +131,10 @@ export async function mountHero(section: HTMLElement) {
   let ready = false;
   let laidOut = "";
   let layoutRun = 0;
+  let quality = storedQuality();
+  let drawTime = 0;
+  let drawCount = -QUALITY_WARMUP;
+  let slowWindows = 0;
 
   const logo = new Image();
   logo.src = logoUrl;
@@ -119,9 +158,13 @@ export async function mountHero(section: HTMLElement) {
 
     // Todo se lee antes de esperar: tras la descarga la pantalla puede haber cambiado.
     const isPortrait = portrait.matches;
-    const maxPixelRatio = isPortrait ? PORTRAIT_MAX_PIXEL_RATIO : MAX_PIXEL_RATIO;
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, maxPixelRatio);
-    const key = `${width}x${height}@${pixelRatio}`;
+    const { glyphScale, maxPixelRatio } = QUALITY[quality];
+    const pixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      isPortrait ? PORTRAIT_MAX_PIXEL_RATIO : MAX_PIXEL_RATIO,
+      maxPixelRatio,
+    );
+    const key = `${width}x${height}@${pixelRatio}/${quality}`;
     if (key === laidOut) return;
 
     const run = ++layoutRun;
@@ -136,7 +179,7 @@ export async function mountHero(section: HTMLElement) {
     if (run !== layoutRun) return;
     laidOut = key;
 
-    scene.layout(width, height, pixelRatio, painting, logo);
+    scene.layout(width, height, pixelRatio, painting, logo, glyphScale);
     draw();
 
     if (ready) return;
@@ -196,13 +239,34 @@ export async function mountHero(section: HTMLElement) {
         if (position === target && veil === horizon && delta > 0 && !stirring) pause();
         return;
       }
-      const idleFrameMs = portrait.matches ? PORTRAIT_IDLE_FRAME_MS : IDLE_FRAME_MS;
-      if (elapsed > INTRO_DURATION && now - lastDraw < idleFrameMs) return;
     }
 
     section.toggleAttribute("data-settled", position >= 1);
-    lastDraw = now;
+    // En el último nivel ya no hay nada que decidir: no se mide.
+    if (quality >= QUALITY.length - 1) return draw();
+    const started = performance.now();
     draw();
+    measure(performance.now() - started);
+  };
+
+  // Se mide lo que tarda el dibujo y no el intervalo entre fotogramas: el ahorro
+  // de batería limita la pantalla a 30 fps aunque el equipo vaya sobrado.
+  const measure = (ms: number) => {
+    if (++drawCount <= 0) return;
+    drawTime += ms;
+    if (drawCount < QUALITY_WINDOW) return;
+    const average = drawTime / drawCount;
+    drawTime = 0;
+    drawCount = 0;
+    slowWindows = average > DRAW_BUDGET_MS ? slowWindows + 1 : 0;
+    if (slowWindows < SLOW_WINDOWS) return;
+    // El equipo no llega: se baja un nivel y no se vuelve a subir, porque probar
+    // de nuevo el nivel caro sería repetir el tirón.
+    slowWindows = 0;
+    drawCount = -QUALITY_WARMUP;
+    quality++;
+    storeQuality(quality);
+    layout();
   };
 
   const play = () => {
