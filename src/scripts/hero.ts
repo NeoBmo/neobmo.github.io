@@ -38,7 +38,12 @@ const fields = new Map<string, Promise<ImageField>>();
 /** Each variant is fetched only when a screen of that shape needs it. */
 async function paintingFor(portrait: boolean): Promise<Painting> {
   const { url, focus } = VARIANTS[portrait ? "portrait" : "landscape"];
-  if (!fields.has(url)) fields.set(url, loadImageField(url));
+  if (!fields.has(url)) {
+    const field = loadImageField(url);
+    // Una descarga fallida no se guarda: el siguiente intento vuelve a pedirla.
+    field.catch(() => fields.delete(url));
+    fields.set(url, field);
+  }
   return { field: await fields.get(url)!, focus };
 }
 
@@ -74,8 +79,8 @@ export async function mountHero(section: HTMLElement) {
   let introHolds = true;
   // Hasta que el lienzo tiene tamaño no hay nada que dibujar.
   let ready = false;
-  let laidWidth = 0;
-  let laidHeight = 0;
+  let laidOut = "";
+  let layoutRun = 0;
 
   const logo = new Image();
   logo.src = logoUrl;
@@ -94,13 +99,26 @@ export async function mountHero(section: HTMLElement) {
     const { width, height } = canvas.getBoundingClientRect();
     // Una pestaña sin tamaño todavía (oculta, en segundo plano) espera al ResizeObserver.
     if (width < 1 || height < 1) return;
-    if (width === laidWidth && height === laidHeight) return;
-    laidWidth = width;
-    laidHeight = height;
 
-    const painting = await paintingFor(portrait.matches);
-    const maxPixelRatio = portrait.matches ? PORTRAIT_MAX_PIXEL_RATIO : MAX_PIXEL_RATIO;
+    // Todo se lee antes de esperar: tras la descarga la pantalla puede haber cambiado.
+    const isPortrait = portrait.matches;
+    const maxPixelRatio = isPortrait ? PORTRAIT_MAX_PIXEL_RATIO : MAX_PIXEL_RATIO;
     const pixelRatio = Math.min(window.devicePixelRatio || 1, maxPixelRatio);
+    const key = `${width}x${height}@${pixelRatio}`;
+    if (key === laidOut) return;
+
+    const run = ++layoutRun;
+    let painting: Painting;
+    try {
+      painting = await paintingFor(isPortrait);
+    } catch {
+      // Sin pintura queda el prompt de carga; el próximo cambio de tamaño reintenta.
+      return;
+    }
+    // Si llegó una petición más nueva mientras se descargaba, esta ya no vale.
+    if (run !== layoutRun) return;
+    laidOut = key;
+
     scene.layout(width, height, pixelRatio, painting, logo);
     draw();
 
