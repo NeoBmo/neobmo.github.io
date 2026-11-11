@@ -5,13 +5,16 @@
 export const DENSITY = [".", ":", "+", "*", "#", "@"] as const;
 export const STROKES = ["-", "\\", "|", "/"] as const;
 export const NOISE = "!#$%&*+-/:;<=>?@[]^_{|}~01".split("");
+/** El logo se escribe con sus propios caracteres. */
+export const LOGO = ["\\", "|", "°"] as const;
 
-export const GLYPHS = [...new Set([...DENSITY, ...STROKES, ...NOISE])];
+export const GLYPHS = [...new Set([...DENSITY, ...STROKES, ...NOISE, ...LOGO])];
 
 const index = (glyph: string) => GLYPHS.indexOf(glyph);
 const DENSITY_INDEX = DENSITY.map(index);
 const STROKE_INDEX = STROKES.map(index);
 export const NOISE_INDEX = NOISE.map(index);
+export const LOGO_INDEX = LOGO.map(index);
 
 export const EMPTY = -1;
 

@@ -1,6 +1,7 @@
 import type { ImageField } from "./image-field";
 import { createGlyphAtlas, type GlyphAtlas } from "./glyph-atlas";
-import { EMPTY, NOISE_INDEX, glyphFor } from "./glyphs";
+import { GLYPH_STRIDE, createGlyphRenderer, type GlyphRenderer } from "./glyph-renderer";
+import { EMPTY, LOGO_INDEX, NOISE_INDEX, glyphFor } from "./glyphs";
 import { clamp, createRandom, easeInOutCubic, easeOutCubic, lerp, smoothstep } from "./math";
 
 /**
@@ -19,8 +20,6 @@ const TIMING = {
   lifeDuration: 2.5,
 };
 
-export const INTRO_DURATION = TIMING.colorStart + TIMING.colorDuration;
-
 /** Points per journey: a random origin, then a stroke that ends at home. */
 const STROKE_STEPS = 18;
 const POINTS = STROKE_STEPS + 2;
@@ -35,7 +34,12 @@ const LOGO_TOP = 0.42;
 const LOGO_TRAVEL = 0.6;
 /** Curvatura del viaje: sale siguiendo su pincelada antes de ir al logo. */
 const LOGO_ARC = 0.25;
-const LOGO_GLYPH = glyphFor(1, 0, 0);
+/**
+ * El logo es «\|°». Hasta estas fracciones de su ancho llegan la barra inclinada
+ * y la barra vertical; el resto es el círculo.
+ */
+const LOGO_SLASH_END = 0.42;
+const LOGO_BAR_END = 0.6;
 const LINE_GLYPH = glyphFor(0.5, 0, 1);
 
 /** Altura de la línea de salida del hero y del horizonte que queda tras él. */
@@ -55,7 +59,8 @@ interface Formation {
   x: Float32Array;
   y: Float32Array;
   size: number;
-  glyph: number;
+  /** Carácter de cada posición. */
+  glyph: Uint8Array;
   /** Tamaño de cada carácter respecto a su celda. */
   scale: number;
 }
@@ -64,6 +69,10 @@ export interface ConvergenceOptions {
   canvas: HTMLCanvasElement;
   fontFamily: string;
   seed?: number;
+  /** Se llama cuando el navegador devuelve la tarjeta gráfica y hay que redibujar. */
+  onRestore?: () => void;
+  /** `false` fuerza Canvas 2D. */
+  webgl?: boolean;
 }
 
 export interface Painting {
@@ -77,7 +86,7 @@ export interface Painting {
  * each glyph following the image's own stroke directions on its way home.
  */
 export class Convergence {
-  private readonly context: CanvasRenderingContext2D;
+  private readonly renderer: GlyphRenderer;
   private readonly canvas: HTMLCanvasElement;
   private readonly fontFamily: string;
   private readonly seed: number;
@@ -88,7 +97,6 @@ export class Convergence {
   private atlas!: GlyphAtlas;
   private width = 0;
   private height = 0;
-  private pixelRatio = 1;
   private gridX = 0;
   private gridY = 0;
   private cols = 0;
@@ -111,6 +119,7 @@ export class Convergence {
   private inLogo = new Uint8Array(0);
   private logoX = new Float32Array(0);
   private logoY = new Float32Array(0);
+  private logoGlyph = new Uint8Array(0);
   private logoDelay = new Float32Array(0);
   private fade = new Float32Array(0);
   private order = new Uint32Array(0);
@@ -121,11 +130,16 @@ export class Convergence {
   private sway = 0;
   private pushX = 0;
   private pushY = 0;
+  // Las posiciones se devuelven aquí y no en un array: un objeto por carácter y
+  // fotograma obliga al navegador a limpiar memoria a mitad de la animación.
+  private atX = 0;
+  private atY = 0;
+  // Lista de caracteres del fotograma: el dibujo la recibe entera, de una vez.
+  private batch = new Float32Array(0);
+  private opacity = 1;
 
-  constructor({ canvas, fontFamily, seed = 1890 }: ConvergenceOptions) {
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("2D canvas is not available");
-    this.context = context;
+  constructor({ canvas, fontFamily, seed = 1890, onRestore = () => {}, webgl }: ConvergenceOptions) {
+    this.renderer = createGlyphRenderer(canvas, onRestore, webgl);
     this.canvas = canvas;
     this.fontFamily = fontFamily;
     this.seed = seed;
@@ -137,17 +151,18 @@ export class Convergence {
     pixelRatio: number,
     painting: Painting,
     logo: HTMLImageElement,
+    /** Agranda los caracteres: menos que dibujar en equipos que no llegan. */
+    glyphScale = 1,
   ) {
     this.field = painting.field;
     this.focus = painting.focus;
     this.width = width;
     this.height = height;
-    this.pixelRatio = pixelRatio;
     this.canvas.width = Math.round(width * pixelRatio);
     this.canvas.height = Math.round(height * pixelRatio);
 
     // Menos de 10.5 px satura las pantallas pequeñas: más caracteres que dibujar y menos pintura.
-    const fontSize = Math.round(clamp(width / 120, 10.5, 14) * 2) / 2;
+    const fontSize = Math.round(clamp(width / 120, 10.5, 14) * glyphScale * 2) / 2;
     this.atlas = createGlyphAtlas(fontSize, pixelRatio, this.fontFamily);
     const { cellWidth, cellHeight } = this.atlas;
 
@@ -166,6 +181,19 @@ export class Convergence {
 
     this.populate(this.sampleCells());
     this.buildFormations(logo);
+    this.renderer.setup({
+      width,
+      height,
+      pixelRatio,
+      atlas: this.atlas,
+      paint: this.colorLayer,
+      grid: {
+        x: this.gridX,
+        y: this.gridY,
+        width: this.cols * cellWidth,
+        height: this.rows * cellHeight,
+      },
+    });
   }
 
   /**
@@ -184,17 +212,12 @@ export class Convergence {
    * la formación 1 y la 2, así que el scroll puede moverla en ambos sentidos.
    */
   renderFormation(stage: number, time: number) {
-    const { context, atlas, formations, order } = this;
-    const { cellWidth, cellHeight, sourceWidth, sourceHeight } = atlas;
+    const { batch, formations, order } = this;
     const from = clamp(Math.floor(stage), 0, formations.length - 2);
     const mix = clamp(stage - from);
     const start = formations[from];
     const end = formations[from + 1];
-
-    context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = 1;
-    context.clearRect(0, 0, this.width, this.height);
+    let filled = 0;
 
     const flicker = Math.floor(time * 12);
     const total = Math.max(start.size, end.size);
@@ -214,20 +237,20 @@ export class Convergence {
         x = lerp(start.x[j], end.x[j], local);
         y = lerp(start.y[j], end.y[j], local);
         scale = lerp(start.scale, end.scale, local);
-        if (local < 0.1) glyph = start.glyph;
-        else if (local > 0.9) glyph = end.glyph;
+        if (local < 0.1) glyph = start.glyph[j];
+        else if (local > 0.9) glyph = end.glyph[j];
         else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
       } else if (inStart) {
         if (mix > this.fade[n]) continue;
         x = start.x[j];
         y = start.y[j];
-        glyph = start.glyph;
+        glyph = start.glyph[j];
         scale = start.scale;
       } else {
         if (mix < 1 - this.fade[n]) continue;
         x = end.x[j];
         y = end.y[j];
-        glyph = end.glyph;
+        glyph = end.glyph[j];
         scale = end.scale;
       }
 
@@ -239,14 +262,13 @@ export class Convergence {
         if (strength > POINTER_NOISE) glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
       }
 
-      const drawWidth = cellWidth * scale;
-      const drawHeight = cellHeight * scale;
-      context.drawImage(
-        atlas.canvas,
-        glyph * sourceWidth, 0, sourceWidth, sourceHeight,
-        x - drawWidth / 2, y - drawHeight / 2, drawWidth, drawHeight,
-      );
+      batch[filled++] = x;
+      batch[filled++] = y;
+      batch[filled++] = glyph;
+      batch[filled++] = scale;
     }
+
+    this.renderer.draw(batch, filled / GLYPH_STRIDE, 0, this.opacity);
   }
 
   /**
@@ -254,20 +276,14 @@ export class Convergence {
    * `dissolve` (0–1) lleva de la pintura al logo y funciona en ambos sentidos.
    */
   render(time: number, still = false, dissolve = 0) {
-    const { context, atlas } = this;
-    const { cellWidth, cellHeight, sourceWidth, sourceHeight } = atlas;
+    const { batch } = this;
+    const { cellWidth } = this.atlas;
     const t = still ? Infinity : time;
     const life = still ? 0 : smoothstep(TIMING.lifeStart, TIMING.lifeStart + TIMING.lifeDuration, t);
     const base = still ? 1 : easeInOutCubic(clamp((t - TIMING.colorStart) / TIMING.colorDuration));
     const color = base * (1 - dissolve);
+    let filled = 0;
 
-    context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = 1;
-    context.clearRect(0, 0, this.width, this.height);
-
-    const halfW = cellWidth / 2;
-    const halfH = cellHeight / 2;
     const flicker = Math.floor(time * 12);
     const stirred = !still && (this.force > 0 || this.sway !== 0);
 
@@ -284,10 +300,12 @@ export class Convergence {
       let glyph: number;
 
       if (toLogo > 0) {
-        [x, y] = this.logoPositionAt(i, toLogo);
+        this.logoPositionAt(i, toLogo);
+        x = this.atX;
+        y = this.atY;
         glyph =
           toLogo > 0.9
-            ? LOGO_GLYPH
+            ? this.logoGlyph[i]
             : NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
       } else if (progress >= 1) {
         const wave = life > 0 ? Math.sin(this.phase[i] - time * 1.4) * life : 0;
@@ -296,7 +314,9 @@ export class Convergence {
         y = this.homeY[i] + this.dirY[i] * drift;
         glyph = glyphFor(this.luminance[i] + wave * 0.09 * this.coherence[i], this.angle[i], this.coherence[i]);
       } else {
-        [x, y] = this.positionAt(i, progress);
+        this.positionAt(i, progress);
+        x = this.atX;
+        y = this.atY;
         glyph =
           progress > 0.9
             ? glyphFor(this.luminance[i], this.angle[i], this.coherence[i])
@@ -312,19 +332,13 @@ export class Convergence {
       }
 
       if (glyph === EMPTY) continue;
-      context.drawImage(
-        atlas.canvas,
-        glyph * sourceWidth, 0, sourceWidth, sourceHeight,
-        x - halfW, y - halfH, cellWidth, cellHeight,
-      );
+      batch[filled++] = x;
+      batch[filled++] = y;
+      batch[filled++] = glyph;
+      batch[filled++] = 1;
     }
 
-    if (color > 0) {
-      context.globalCompositeOperation = "source-atop";
-      context.globalAlpha = color;
-      context.imageSmoothingEnabled = true;
-      context.drawImage(this.colorLayer, this.gridX, this.gridY, this.cols * cellWidth, this.rows * cellHeight);
-    }
+    this.renderer.draw(batch, filled / GLYPH_STRIDE, color, this.opacity);
   }
 
   /**
@@ -342,9 +356,10 @@ export class Convergence {
     const radius = cellHeight * POINTER_RADIUS;
     const dx = x - this.pointerX;
     const dy = y - this.pointerY;
-    const distance = Math.hypot(dx, dy);
-    if (distance >= radius) return 0;
+    const squared = dx * dx + dy * dy;
+    if (squared >= radius * radius) return 0;
 
+    const distance = Math.sqrt(squared);
     const strength = (1 - distance / radius) ** 2 * this.force;
     const reach = (radius * POINTER_PUSH * strength) / Math.max(distance, 1);
     this.pushX += dx * reach;
@@ -352,13 +367,9 @@ export class Convergence {
     return strength;
   }
 
-  /** Atenúa lo ya dibujado, sea pintura o figura, para que el texto de encima se lea. */
+  /** Fija la opacidad del próximo dibujo, para que el texto de encima se lea. */
   dim(alpha: number) {
-    const { context } = this;
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.globalCompositeOperation = "destination-in";
-    context.globalAlpha = alpha;
-    context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.opacity = alpha;
   }
 
   /** Averages the covered image over each cell; the browser does the filtering. */
@@ -406,6 +417,7 @@ export class Convergence {
     const random = createRandom(this.seed);
     const capacity = cols * rows;
 
+    this.batch = new Float32Array(capacity * GLYPH_STRIDE);
     this.path = new Float32Array(capacity * POINTS * 2);
     this.homeX = new Float32Array(capacity);
     this.homeY = new Float32Array(capacity);
@@ -497,6 +509,7 @@ export class Convergence {
     this.inLogo = new Uint8Array(count);
     this.logoX = new Float32Array(count);
     this.logoY = new Float32Array(count);
+    this.logoGlyph = new Uint8Array(count);
     this.logoDelay = new Float32Array(count);
     this.fade = new Float32Array(count);
 
@@ -524,6 +537,7 @@ export class Convergence {
       this.inLogo[n] = 1;
       this.logoX[n] = logoShape.x[j];
       this.logoY[n] = logoShape.y[j];
+      this.logoGlyph[n] = logoShape.glyph[j];
     }
   }
 
@@ -548,7 +562,7 @@ export class Convergence {
     const x = new Float32Array(size);
     const y = new Float32Array(size).fill(height * topRatio);
     for (let j = 0; j < size; j++) x[j] = this.gridX + (j + 0.5) * cellWidth;
-    return { x, y, size, glyph: LINE_GLYPH, scale: 1 };
+    return { x, y, size, glyph: new Uint8Array(size).fill(LINE_GLYPH), scale: 1 };
   }
 
   /** Convierte en celdas lo que `draw` pinta en una capa del tamaño de la figura. */
@@ -575,6 +589,7 @@ export class Convergence {
     const top = (height - rows * cellHeight) * topRatio;
     const x = new Float32Array(count);
     const y = new Float32Array(count);
+    const glyph = new Uint8Array(count);
     let size = 0;
 
     for (let row = 0; row < rows; row++) {
@@ -582,41 +597,47 @@ export class Convergence {
         if (data[(row * cols + col) * 4 + 3] < 128) continue;
         x[size] = left + (col + 0.5) * cellWidth;
         y[size] = top + (row + 0.5) * cellHeight;
+        // Cada trazo del logo se escribe con el carácter que representa.
+        const across = (col + 0.5) / cols;
+        glyph[size] = LOGO_INDEX[across < LOGO_SLASH_END ? 0 : across < LOGO_BAR_END ? 1 : 2];
         size++;
       }
     }
 
-    return { x, y, size, glyph: LOGO_GLYPH, scale };
+    return { x, y, size, glyph, scale };
   }
 
-  private logoPositionAt(n: number, progress: number): [number, number] {
+  /** Deja en `atX`/`atY` el punto del viaje de la pintura al logo. */
+  private logoPositionAt(n: number, progress: number) {
     const startX = this.homeX[n];
     const startY = this.homeY[n];
     const endX = this.logoX[n];
     const endY = this.logoY[n];
-    const distance = Math.hypot(endX - startX, endY - startY);
+    const distance = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
     const controlX = (startX + endX) / 2 + this.dirX[n] * distance * LOGO_ARC;
     const controlY = (startY + endY) / 2 + this.dirY[n] * distance * LOGO_ARC;
-    return [
-      lerp(lerp(startX, controlX, progress), lerp(controlX, endX, progress), progress),
-      lerp(lerp(startY, controlY, progress), lerp(controlY, endY, progress), progress),
-    ];
+    this.atX = lerp(lerp(startX, controlX, progress), lerp(controlX, endX, progress), progress);
+    this.atY = lerp(lerp(startY, controlY, progress), lerp(controlY, endY, progress), progress);
   }
 
-  private positionAt(n: number, progress: number): [number, number] {
+  /** Deja en `atX`/`atY` el punto del viaje del ruido a la pintura. */
+  private positionAt(n: number, progress: number) {
     const base = n * POINTS * 2;
     const path = this.path;
 
     if (progress < SWEEP) {
       const t = easeOutCubic(progress / SWEEP);
-      return [lerp(path[base], path[base + 2], t), lerp(path[base + 1], path[base + 3], t)];
+      this.atX = lerp(path[base], path[base + 2], t);
+      this.atY = lerp(path[base + 1], path[base + 3], t);
+      return;
     }
 
     const along = ((progress - SWEEP) / (1 - SWEEP)) * (POINTS - 2);
     const segment = Math.min(Math.floor(along), POINTS - 3);
     const t = along - segment;
     const a = base + (segment + 1) * 2;
-    return [lerp(path[a], path[a + 2], t), lerp(path[a + 1], path[a + 3], t)];
+    this.atX = lerp(path[a], path[a + 2], t);
+    this.atY = lerp(path[a + 1], path[a + 3], t);
   }
 
   private fieldIndex(x: number, y: number) {
@@ -631,7 +652,7 @@ const emptyFormation = (): Formation => ({
   x: new Float32Array(0),
   y: new Float32Array(0),
   size: 0,
-  glyph: LOGO_GLYPH,
+  glyph: new Uint8Array(0),
   scale: 1,
 });
 
