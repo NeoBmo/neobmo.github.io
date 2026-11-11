@@ -1,5 +1,6 @@
 import type { ImageField } from "./image-field";
 import { createGlyphAtlas, type GlyphAtlas } from "./glyph-atlas";
+import { GLYPH_STRIDE, createGlyphRenderer, type GlyphRenderer } from "./glyph-renderer";
 import { EMPTY, NOISE_INDEX, glyphFor } from "./glyphs";
 import { clamp, createRandom, easeInOutCubic, easeOutCubic, lerp, smoothstep } from "./math";
 
@@ -62,6 +63,10 @@ export interface ConvergenceOptions {
   canvas: HTMLCanvasElement;
   fontFamily: string;
   seed?: number;
+  /** Se llama cuando el navegador devuelve la tarjeta gráfica y hay que redibujar. */
+  onRestore?: () => void;
+  /** `false` fuerza Canvas 2D. */
+  webgl?: boolean;
 }
 
 export interface Painting {
@@ -75,7 +80,7 @@ export interface Painting {
  * each glyph following the image's own stroke directions on its way home.
  */
 export class Convergence {
-  private readonly context: CanvasRenderingContext2D;
+  private readonly renderer: GlyphRenderer;
   private readonly canvas: HTMLCanvasElement;
   private readonly fontFamily: string;
   private readonly seed: number;
@@ -86,7 +91,6 @@ export class Convergence {
   private atlas!: GlyphAtlas;
   private width = 0;
   private height = 0;
-  private pixelRatio = 1;
   private gridX = 0;
   private gridY = 0;
   private cols = 0;
@@ -123,11 +127,12 @@ export class Convergence {
   // fotograma obliga al navegador a limpiar memoria a mitad de la animación.
   private atX = 0;
   private atY = 0;
+  // Lista de caracteres del fotograma: el dibujo la recibe entera, de una vez.
+  private batch = new Float32Array(0);
+  private opacity = 1;
 
-  constructor({ canvas, fontFamily, seed = 1890 }: ConvergenceOptions) {
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("2D canvas is not available");
-    this.context = context;
+  constructor({ canvas, fontFamily, seed = 1890, onRestore = () => {}, webgl }: ConvergenceOptions) {
+    this.renderer = createGlyphRenderer(canvas, onRestore, webgl);
     this.canvas = canvas;
     this.fontFamily = fontFamily;
     this.seed = seed;
@@ -146,7 +151,6 @@ export class Convergence {
     this.focus = painting.focus;
     this.width = width;
     this.height = height;
-    this.pixelRatio = pixelRatio;
     this.canvas.width = Math.round(width * pixelRatio);
     this.canvas.height = Math.round(height * pixelRatio);
 
@@ -170,6 +174,19 @@ export class Convergence {
 
     this.populate(this.sampleCells());
     this.buildFormations(logo);
+    this.renderer.setup({
+      width,
+      height,
+      pixelRatio,
+      atlas: this.atlas,
+      paint: this.colorLayer,
+      grid: {
+        x: this.gridX,
+        y: this.gridY,
+        width: this.cols * cellWidth,
+        height: this.rows * cellHeight,
+      },
+    });
   }
 
   /**
@@ -188,17 +205,12 @@ export class Convergence {
    * la formación 1 y la 2, así que el scroll puede moverla en ambos sentidos.
    */
   renderFormation(stage: number, time: number) {
-    const { context, atlas, formations, order } = this;
-    const { cellWidth, cellHeight, sourceWidth, sourceHeight } = atlas;
+    const { batch, formations, order } = this;
     const from = clamp(Math.floor(stage), 0, formations.length - 2);
     const mix = clamp(stage - from);
     const start = formations[from];
     const end = formations[from + 1];
-
-    context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = 1;
-    context.clearRect(0, 0, this.width, this.height);
+    let filled = 0;
 
     const flicker = Math.floor(time * 12);
     const total = Math.max(start.size, end.size);
@@ -243,14 +255,13 @@ export class Convergence {
         if (strength > POINTER_NOISE) glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
       }
 
-      const drawWidth = cellWidth * scale;
-      const drawHeight = cellHeight * scale;
-      context.drawImage(
-        atlas.canvas,
-        glyph * sourceWidth, 0, sourceWidth, sourceHeight,
-        x - drawWidth / 2, y - drawHeight / 2, drawWidth, drawHeight,
-      );
+      batch[filled++] = x;
+      batch[filled++] = y;
+      batch[filled++] = glyph;
+      batch[filled++] = scale;
     }
+
+    this.renderer.draw(batch, filled / GLYPH_STRIDE, 0, this.opacity);
   }
 
   /**
@@ -258,20 +269,14 @@ export class Convergence {
    * `dissolve` (0–1) lleva de la pintura al logo y funciona en ambos sentidos.
    */
   render(time: number, still = false, dissolve = 0) {
-    const { context, atlas } = this;
-    const { cellWidth, cellHeight, sourceWidth, sourceHeight } = atlas;
+    const { batch } = this;
+    const { cellWidth } = this.atlas;
     const t = still ? Infinity : time;
     const life = still ? 0 : smoothstep(TIMING.lifeStart, TIMING.lifeStart + TIMING.lifeDuration, t);
     const base = still ? 1 : easeInOutCubic(clamp((t - TIMING.colorStart) / TIMING.colorDuration));
     const color = base * (1 - dissolve);
+    let filled = 0;
 
-    context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
-    context.globalCompositeOperation = "source-over";
-    context.globalAlpha = 1;
-    context.clearRect(0, 0, this.width, this.height);
-
-    const halfW = cellWidth / 2;
-    const halfH = cellHeight / 2;
     const flicker = Math.floor(time * 12);
     const stirred = !still && (this.force > 0 || this.sway !== 0);
 
@@ -320,19 +325,13 @@ export class Convergence {
       }
 
       if (glyph === EMPTY) continue;
-      context.drawImage(
-        atlas.canvas,
-        glyph * sourceWidth, 0, sourceWidth, sourceHeight,
-        x - halfW, y - halfH, cellWidth, cellHeight,
-      );
+      batch[filled++] = x;
+      batch[filled++] = y;
+      batch[filled++] = glyph;
+      batch[filled++] = 1;
     }
 
-    if (color > 0) {
-      context.globalCompositeOperation = "source-atop";
-      context.globalAlpha = color;
-      context.imageSmoothingEnabled = true;
-      context.drawImage(this.colorLayer, this.gridX, this.gridY, this.cols * cellWidth, this.rows * cellHeight);
-    }
+    this.renderer.draw(batch, filled / GLYPH_STRIDE, color, this.opacity);
   }
 
   /**
@@ -361,13 +360,9 @@ export class Convergence {
     return strength;
   }
 
-  /** Atenúa lo ya dibujado, sea pintura o figura, para que el texto de encima se lea. */
+  /** Fija la opacidad del próximo dibujo, para que el texto de encima se lea. */
   dim(alpha: number) {
-    const { context } = this;
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.globalCompositeOperation = "destination-in";
-    context.globalAlpha = alpha;
-    context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.opacity = alpha;
   }
 
   /** Averages the covered image over each cell; the browser does the filtering. */
@@ -415,6 +410,7 @@ export class Convergence {
     const random = createRandom(this.seed);
     const capacity = cols * rows;
 
+    this.batch = new Float32Array(capacity * GLYPH_STRIDE);
     this.path = new Float32Array(capacity * POINTS * 2);
     this.homeX = new Float32Array(capacity);
     this.homeY = new Float32Array(capacity);

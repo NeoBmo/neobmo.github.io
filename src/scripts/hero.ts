@@ -36,13 +36,21 @@ const QUALITY = [
   { glyphScale: 1.45, maxPixelRatio: 1 },
 ];
 /**
- * Dibujar no debe pasar de este tiempo medio: deja libre parte del fotograma de
- * 60 fps (16,7 ms), porque después el navegador aún tiene que pintarlo.
+ * El equipo «no llega» si, con todos los caracteres en pantalla, los fotogramas
+ * duran de media más que esto y bastante más que al empezar la intro, cuando
+ * casi no hay nada que dibujar. Comparar con el principio evita castigar a quien
+ * tiene la pantalla limitada a 30 fps por el ahorro de batería.
  */
-const DRAW_BUDGET_MS = 10;
+const SLOW_FRAME_MS = 1000 / 50;
+const SLOW_RATIO = 1.3;
+/** Segundos de intro: hasta aquí se toma la referencia y desde aquí se mide. */
+const BASELINE_UNTIL = 0.8;
+const MEASURE_FROM = 2;
+/** Fotogramas por ventana de medida, y los mínimos para fiarse de la referencia. */
 const QUALITY_WINDOW = 30;
-/** Los primeros dibujos tras cargar o cambiar de nivel son lentos sin que el equipo lo sea. */
-const QUALITY_WARMUP = 20;
+const BASELINE_FRAMES = 5;
+/** Un parón largo (cambio de pestaña) no cuenta entero como lentitud. */
+const LONGEST_FRAME_MS = 200;
 /** Una ventana lenta puede ser casualidad (fuentes cargando); dos seguidas, no. */
 const SLOW_WINDOWS = 2;
 const QUALITY_KEY = "backdrop-quality";
@@ -89,15 +97,28 @@ async function paintingFor(portrait: boolean): Promise<Painting> {
 
 export async function mountHero(section: HTMLElement) {
   // El lienzo vive fuera del hero: es el fondo fijo de toda la página.
-  const canvas = document.querySelector<HTMLCanvasElement>("[data-backdrop]");
-  if (!canvas) return;
+  const backdrop = document.querySelector<HTMLCanvasElement>("[data-backdrop]");
+  if (!backdrop) return;
+  let canvas = backdrop;
 
   // Cada carga empieza arriba: la coreografía no puede arrancar a mitad del scroll.
   history.scrollRestoration = "manual";
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const portrait = window.matchMedia(PORTRAIT_QUERY);
-  const scene = new Convergence({ canvas, fontFamily: FONT_FAMILY });
+  const onRestore = () => {
+    if (ready) draw();
+  };
+  let scene: Convergence;
+  try {
+    scene = new Convergence({ canvas, fontFamily: FONT_FAMILY, onRestore });
+  } catch {
+    // La tarjeta gráfica rechazó el dibujo. Un lienzo que ya pidió WebGL no puede
+    // dar Canvas 2D, así que se sustituye por una copia limpia.
+    canvas = canvas.cloneNode() as HTMLCanvasElement;
+    backdrop.replaceWith(canvas);
+    scene = new Convergence({ canvas, fontFamily: FONT_FAMILY, onRestore, webgl: false });
+  }
 
   let elapsed = 0;
   let lastFrame = 0;
@@ -132,8 +153,9 @@ export async function mountHero(section: HTMLElement) {
   let laidOut = "";
   let layoutRun = 0;
   let quality = storedQuality();
-  let drawTime = 0;
-  let drawCount = -QUALITY_WARMUP;
+  const baseline: number[] = [];
+  let frameTime = 0;
+  let frameCount = 0;
   let slowWindows = 0;
 
   const logo = new Image();
@@ -144,11 +166,11 @@ export async function mountHero(section: HTMLElement) {
     drawnPosition = position;
     drawnVeil = veil;
     drawnStirred = force > 0 || sway !== 0;
+    scene.dim(reducedMotion.matches ? 1 : lerp(1, HORIZON_ALPHA, veil));
     if (reducedMotion.matches) return scene.render(elapsed, true);
     scene.disturb(pointerX, pointerY, force, sway);
     if (position > 1) scene.renderFormation(position - 1, elapsed);
     else scene.render(elapsed, false, position);
-    if (veil > 0) scene.dim(lerp(1, HORIZON_ALPHA, veil));
   };
 
   const layout = async () => {
@@ -191,7 +213,8 @@ export async function mountHero(section: HTMLElement) {
 
   const tick = (now: number) => {
     frame = requestAnimationFrame(tick);
-    const delta = Math.min((now - (lastFrame || now)) / 1000, 0.1);
+    const interval = now - (lastFrame || now);
+    const delta = Math.min(interval / 1000, 0.1);
     lastFrame = now;
 
     const introRunning = elapsed < LOGO_AT;
@@ -242,28 +265,29 @@ export async function mountHero(section: HTMLElement) {
     }
 
     section.toggleAttribute("data-settled", position >= 1);
-    // En el último nivel ya no hay nada que decidir: no se mide.
-    if (quality >= QUALITY.length - 1) return draw();
-    const started = performance.now();
     draw();
-    measure(performance.now() - started);
+    // Solo se mide durante la intro, que es cuando viajan todos los caracteres, y
+    // nunca en el último nivel, donde ya no hay nada que decidir.
+    if (introRunning && interval > 0 && quality < QUALITY.length - 1) measure(interval);
   };
 
-  // Se mide lo que tarda el dibujo y no el intervalo entre fotogramas: el ahorro
-  // de batería limita la pantalla a 30 fps aunque el equipo vaya sobrado.
-  const measure = (ms: number) => {
-    if (++drawCount <= 0) return;
-    drawTime += ms;
-    if (drawCount < QUALITY_WINDOW) return;
-    const average = drawTime / drawCount;
-    drawTime = 0;
-    drawCount = 0;
-    slowWindows = average > DRAW_BUDGET_MS ? slowWindows + 1 : 0;
+  // Se mide el tiempo entre fotogramas: el dibujo lo hace la tarjeta gráfica
+  // después de que el código termina, así que cronometrar el código no dice nada.
+  const measure = (interval: number) => {
+    if (elapsed < BASELINE_UNTIL) baseline.push(interval);
+    if (elapsed < MEASURE_FROM || baseline.length < BASELINE_FRAMES) return;
+    frameTime += Math.min(interval, LONGEST_FRAME_MS);
+    if (++frameCount < QUALITY_WINDOW) return;
+    const average = frameTime / frameCount;
+    frameTime = 0;
+    frameCount = 0;
+    // La mediana ignora los tirones sueltos del arranque.
+    const usual = [...baseline].sort((a, b) => a - b)[baseline.length >> 1];
+    slowWindows = average > Math.max(SLOW_FRAME_MS, usual * SLOW_RATIO) ? slowWindows + 1 : 0;
     if (slowWindows < SLOW_WINDOWS) return;
     // El equipo no llega: se baja un nivel y no se vuelve a subir, porque probar
     // de nuevo el nivel caro sería repetir el tirón.
     slowWindows = 0;
-    drawCount = -QUALITY_WARMUP;
     quality++;
     storeQuality(quality);
     layout();
