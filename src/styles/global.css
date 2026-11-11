@@ -33,7 +33,7 @@ body {
   font-size: var(--text-base);
   line-height: 1.6;
   color: var(--color-signal);
-  background: var(--color-void);
+  /* Sin fondo propio: lo pone `html`, y así no tapa el lienzo fijo de la portada. */
   -webkit-font-smoothing: antialiased;
 }
 

@@ -14,3 +14,13 @@ const sections = (await getCollection("sections")).sort((a, b) => a.data.order -
     </section>
   ))
 }
+
+<style>
+  /* Cada sección es una escena: ocupa la pantalla y da recorrido al lienzo. */
+  .teaser {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100svh;
+  }
+</style>

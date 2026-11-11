@@ -38,13 +38,9 @@ const LOGO_ARC = 0.25;
 const LOGO_GLYPH = glyphFor(1, 0, 0);
 const LINE_GLYPH = glyphFor(0.5, 0, 1);
 
-/** Ancho y alto máximos de los nombres gigantes, y altura de la línea de salida. */
-const TEXT_WIDTH = 0.86;
-const TEXT_HEIGHT = 0.42;
-const TEXT_LINE_HEIGHT = 1.1;
+/** Altura de la línea de salida del hero y del horizonte que queda tras él. */
 const EXIT_LINE_TOP = 0.8;
-/** En pantallas verticales los nombres usan caracteres más pequeños para leerse. */
-const PORTRAIT_TEXT_SCALE = 0.55;
+const HORIZON_TOP = 0.08;
 
 /** Una figura hecha de caracteres: el carácter `order[j]` va a la posición `j`. */
 interface Formation {
@@ -111,7 +107,6 @@ export class Convergence {
   private fade = new Float32Array(0);
   private order = new Uint32Array(0);
   private formations: Formation[] = [];
-  private portrait = false;
 
   constructor({ canvas, fontFamily, seed = 1890 }: ConvergenceOptions) {
     const context = canvas.getContext("2d");
@@ -128,9 +123,7 @@ export class Convergence {
     pixelRatio: number,
     painting: Painting,
     logo: HTMLImageElement,
-    portrait: boolean,
   ) {
-    this.portrait = portrait;
     this.field = painting.field;
     this.focus = painting.focus;
     this.width = width;
@@ -291,6 +284,15 @@ export class Convergence {
     }
   }
 
+  /** Atenúa lo ya dibujado, sea pintura o figura, para que el texto de encima se lea. */
+  dim(alpha: number) {
+    const { context } = this;
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.globalCompositeOperation = "destination-in";
+    context.globalAlpha = alpha;
+    context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
   /** Averages the covered image over each cell; the browser does the filtering. */
   private sampleCells() {
     const { cols, rows, cover, field } = this;
@@ -419,7 +421,7 @@ export class Convergence {
     }
   }
 
-  /** Prepara las figuras en orden: logo, NeoBmo, Luis Rodríguez y línea de salida. */
+  /** Prepara las figuras en orden: logo, línea de salida y horizonte. */
   private buildFormations(logo: HTMLImageElement) {
     const { count } = this;
     const random = createRandom(this.seed + 1);
@@ -442,8 +444,11 @@ export class Convergence {
       [this.order[i], this.order[j]] = [this.order[j], this.order[i]];
     }
 
-    const name = this.portrait ? ["Luis", "Rodríguez"] : ["Luis Rodríguez"];
-    this.formations = [this.logoFormation(logo), this.textFormation(["NeoBmo"]), this.textFormation(name), this.lineFormation()];
+    this.formations = [
+      this.logoFormation(logo),
+      this.lineFormation(EXIT_LINE_TOP),
+      this.lineFormation(HORIZON_TOP),
+    ];
 
     const [logoShape] = this.formations;
     for (let j = 0; j < logoShape.size; j++) {
@@ -468,40 +473,12 @@ export class Convergence {
     });
   }
 
-  private textFormation(lines: string[]) {
-    const { width, height, fontFamily } = this;
-    const scale = this.portrait ? PORTRAIT_TEXT_SCALE : 1;
-    const cellWidth = this.atlas.cellWidth * scale;
-    const cellHeight = this.atlas.cellHeight * scale;
-    const cols = Math.ceil(width / cellWidth);
-    const rows = Math.ceil(height / cellHeight);
-    if (cols < 1 || rows < 1) return emptyFormation();
-
-    return this.maskFormation(cols, rows, scale, 0.5, (context) => {
-      const measure = 100;
-      context.scale(1 / cellWidth, 1 / cellHeight);
-      context.font = `700 ${measure}px ${fontFamily}`;
-      const widest = Math.max(...lines.map((line) => context.measureText(line).width));
-      const fontSize = Math.min(
-        (width * TEXT_WIDTH * measure) / widest,
-        (height * TEXT_HEIGHT) / (lines.length * TEXT_LINE_HEIGHT),
-      );
-      const lineHeight = fontSize * TEXT_LINE_HEIGHT;
-      const top = height * LOGO_TOP - ((lines.length - 1) * lineHeight) / 2;
-
-      context.font = `700 ${fontSize}px ${fontFamily}`;
-      context.textAlign = "center";
-      context.textBaseline = "middle";
-      lines.forEach((line, index) => context.fillText(line, width / 2, top + index * lineHeight));
-    });
-  }
-
-  private lineFormation() {
+  private lineFormation(topRatio: number) {
     const { cols, height } = this;
     const { cellWidth } = this.atlas;
     const size = Math.min(cols, this.count);
     const x = new Float32Array(size);
-    const y = new Float32Array(size).fill(height * EXIT_LINE_TOP);
+    const y = new Float32Array(size).fill(height * topRatio);
     for (let j = 0; j < size; j++) x[j] = this.gridX + (j + 0.5) * cellWidth;
     return { x, y, size, glyph: LINE_GLYPH, scale: 1 };
   }
