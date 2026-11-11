@@ -15,17 +15,19 @@ export const RATE_RESPONSE = 2.5;
 /** Qué tan rápido los caracteres alcanzan al scroll, por segundo. */
 export const STAGE_RESPONSE = 8;
 
+/** Pantallas de scroll, tras el hero, que tarda la línea en subir a horizonte. */
+export const HORIZON_SCROLL = 0.6;
+/** Opacidad del lienzo cuando hay texto encima. */
+export const HORIZON_ALPHA = 0.4;
+
 /**
  * Pares [avance del scroll tras el logo, formación]. Dos paradas con la misma
- * formación son una pausa: logo → NeoBmo → Luis Rodríguez → línea.
+ * formación son una pausa: el logo espera a la consola y luego baja a la línea.
  */
 const STAGES = [
   [0, 0],
-  [0.28, 1],
-  [0.45, 1],
-  [0.72, 2],
-  [0.88, 2],
-  [1, 3],
+  [0.55, 0],
+  [1, 1],
 ] as const;
 
 /** Tramo del scroll que usa el hero tras el logo, de 0 a 1. */

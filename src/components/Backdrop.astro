@@ -1,0 +1,28 @@
+<canvas class="backdrop" aria-hidden="true" data-backdrop></canvas>
+
+<style>
+  /* Un solo lienzo detrás de toda la página: el contenido pasa por encima. */
+  .backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    width: 100%;
+    /* svh y no dvh: la barra de URL del móvil no debe redibujar la obra. */
+    height: 100svh;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s var(--ease-out);
+  }
+
+  .backdrop[data-ready] {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* La pintura queda fija en el hero y se va con él: nada detrás del texto. */
+    .backdrop {
+      position: absolute;
+    }
+  }
+</style>
