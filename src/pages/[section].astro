@@ -21,6 +21,13 @@ const { Content } = await render(section);
     <a href={href(`#${section.id}`)}>Volver</a>
     <article>
       <h1>{section.data.title}</h1>
+      {
+        section.data.repo && (
+          <a href={section.data.repo} aria-label={`Ver el repositorio de ${section.data.title}`}>
+            Ver repositorio
+          </a>
+        )
+      }
       <Content />
     </article>
   </main>

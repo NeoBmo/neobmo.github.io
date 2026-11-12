@@ -13,24 +13,24 @@ const total = String(projects.length).padStart(2, "0");
         Proyectos
       </h2>
       {projects.map(({ id, data }, index) => (
-        <article class="project reading" data-symbol={data.symbol} aria-labelledby={`${id}-title`}>
-          <div class="project__body">
-            <p class="project__note">
+        <article class="scene reading" data-symbol={data.symbol} aria-labelledby={`${id}-title`}>
+          <div class="scene__body">
+            <p class="scene__note">
               Proyectos · {String(index + 1).padStart(2, "0")}/{total}
             </p>
             <h3 id={`${id}-title`}>{data.title}</h3>
-            <p class="project__note">
+            <p class="scene__note">
               {data.status} · {data.strength}
             </p>
             <p>{data.summary}</p>
             {data.stack.length > 0 && (
-              <ul class="project__stack" aria-label="Tecnologías">
+              <ul class="stack" aria-label="Tecnologías">
                 {data.stack.map((item) => (
                   <li>{item}</li>
                 ))}
               </ul>
             )}
-            <p class="project__links">
+            <p class="scene__links">
               {data.site && (
                 <a href={data.site} aria-label={`Ver el sitio de ${data.title}`}>
                   Ver sitio
@@ -53,32 +53,13 @@ const total = String(projects.length).padStart(2, "0");
 }
 
 <style>
-  /* Cada proyecto es una escena: ocupa la pantalla y deja sitio a su símbolo en el lienzo. */
-  .project {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    min-height: 100svh;
-  }
-
-  /* El texto no llena la columna: a su derecha se forma el símbolo. */
-  .project__body {
-    max-width: 40ch;
-  }
-
-  .project__note {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--color-dim);
-  }
-
   h3 {
     margin: 0.4em 0 0.2em;
     font-size: var(--text-lg);
     line-height: 1.2;
   }
 
-  .project__stack {
+  .stack {
     display: flex;
     flex-wrap: wrap;
     gap: 0.3em 1.2em;
@@ -87,20 +68,5 @@ const total = String(projects.length).padStart(2, "0");
     font-size: var(--text-sm);
     color: var(--color-dim);
     list-style: none;
-  }
-
-  .project__links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6em 1.6em;
-    margin: 1.4em 0 0;
-  }
-
-  /* La misma frontera que usa el lienzo: en vertical el símbolo va arriba y el texto abajo. */
-  @media (max-aspect-ratio: 6/7) {
-    .project {
-      justify-content: flex-end;
-      padding-bottom: 12svh;
-    }
   }
 </style>

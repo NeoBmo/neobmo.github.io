@@ -2,25 +2,83 @@
 import { getCollection } from "astro:content";
 import { href } from "../lib/url";
 
-const sections = (await getCollection("sections")).sort((a, b) => a.data.order - b.data.order);
+interface Props {
+  /** Qué secciones pintar: las que van antes de los proyectos o las de después. */
+  afterProjects?: boolean;
+}
+
+const { afterProjects = false } = Astro.props;
+const sections = (await getCollection("sections"))
+  .filter(({ data }) => data.afterProjects === afterProjects)
+  .sort((a, b) => a.data.order - b.data.order);
 ---
 
 {
   sections.map(({ id, data }) => (
-    <section class="teaser reading" id={id} aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>{data.title}</h2>
-      <p>{data.summary}</p>
-      <a href={href(id)}>Seguir leyendo</a>
+    <section class="scene reading" id={id} data-symbol={data.symbol} aria-labelledby={`${id}-title`}>
+      <div class={data.symbol ? "scene__body" : "plain"}>
+        {data.kicker && <p class="scene__note">{data.kicker}</p>}
+        <h2 id={`${id}-title`}>{data.title}</h2>
+        <p>{data.summary}</p>
+        {data.steps.length > 0 && (
+          <ol class="steps" role="list">
+            {data.steps.map((step) => (
+              <li>{step}</li>
+            ))}
+          </ol>
+        )}
+        {data.symbol ? (
+          <p class="scene__links">
+            {data.repo && (
+              <a href={data.repo} aria-label={`Ver el repositorio de ${data.title}`}>
+                Ver repositorio
+              </a>
+            )}
+            <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`}>
+              Seguir leyendo
+            </a>
+          </p>
+        ) : (
+          <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`}>
+            Seguir leyendo
+          </a>
+        )}
+      </div>
     </section>
   ))
 }
 
 <style>
-  /* Cada sección es una escena: ocupa la pantalla y da recorrido al lienzo. */
-  .teaser {
+  /* Sin símbolo, el contenedor no cuenta: el texto se coloca como antes de las escenas. */
+  .plain {
+    display: contents;
+  }
+
+  /* Solo en las escenas con símbolo: las demás conservan el título de siempre. */
+  .scene__body h2 {
+    margin: 0.3em 0 0.4em;
+    font-size: var(--text-lg);
+    line-height: 1.2;
+  }
+
+  /* Los pasos van numerados y en línea: se leen como un recorrido, no como una lista. */
+  .steps {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    min-height: 100svh;
+    flex-wrap: wrap;
+    gap: 0.3em 1.2em;
+    margin: 1em 0 0;
+    padding: 0;
+    font-size: var(--text-sm);
+    color: var(--color-dim);
+    list-style: none;
+    counter-reset: step;
+  }
+
+  .steps li {
+    counter-increment: step;
+  }
+
+  .steps li::before {
+    content: counter(step, decimal-leading-zero) " ";
   }
 </style>

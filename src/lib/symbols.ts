@@ -2,7 +2,7 @@
  * Símbolos de los proyectos, dibujados con los caracteres del lienzo. Cada
  * carácter que no es un espacio ocupa una celda; todos deben existir en `GLYPHS`.
  */
-export const SYMBOL_NAMES = ["notebook", "ledger", "tag", "phone"] as const;
+export const SYMBOL_NAMES = ["notebook", "ledger", "tag", "phone", "loop"] as const;
 
 export type SymbolName = (typeof SYMBOL_NAMES)[number];
 
@@ -39,6 +39,14 @@ export const SYMBOLS: Record<SymbolName, readonly string[]> = {
     String.raw`  \     /        /  `,
     String.raw`   \   /        /   `,
     String.raw`      /             `,
+  ],
+  // Un bucle de seis pasos: el recorrido de cada tarea.
+  loop: [
+    "[ # ]--->[ # ]--->[ # ]",
+    "  ^                 |  ",
+    "  |                 |  ",
+    "  |                 |  ",
+    "[ # ]<---[ # ]<---[ # ]",
   ],
   // Un teléfono: la primera aplicación móvil.
   phone: [
