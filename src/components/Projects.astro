@@ -1,8 +1,13 @@
 ---
-import { getCollection } from "astro:content";
+import { getCollection, render } from "astro:content";
+import Sheet from "./Sheet.astro";
 import { href } from "../lib/url";
 
-const projects = (await getCollection("projects")).sort((a, b) => a.data.order - b.data.order);
+const entries = (await getCollection("projects")).sort((a, b) => a.data.order - b.data.order);
+// El texto completo de cada proyecto va en la portada, en su ventana de lectura.
+const projects = await Promise.all(
+  entries.map(async (entry) => ({ ...entry, Content: (await render(entry)).Content })),
+);
 const total = String(projects.length).padStart(2, "0");
 ---
 
@@ -12,7 +17,7 @@ const total = String(projects.length).padStart(2, "0");
       <h2 id="projects-title" class="visually-hidden">
         Proyectos
       </h2>
-      {projects.map(({ id, data }, index) => (
+      {projects.map(({ id, data, Content }, index) => (
         <article
           class="scene reading"
           data-symbol={data.symbol}
@@ -45,11 +50,21 @@ const total = String(projects.length).padStart(2, "0");
                   Ver código
                 </a>
               )}
-              <a href={href(`proyectos/${id}`)} aria-label={`Leer más sobre ${data.title}`}>
+              <a
+                href={href(`proyectos/${id}`)}
+                aria-label={`Leer más sobre ${data.title}`}
+                data-sheet={`leer-${id}`}
+              >
                 Leer más
               </a>
             </p>
           </div>
+          <Sheet id={`leer-${id}`} title={data.title}>
+            <p class="scene__note">
+              {data.status} · {data.strength}
+            </p>
+            <Content />
+          </Sheet>
         </article>
       ))}
     </section>

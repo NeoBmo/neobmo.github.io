@@ -1,0 +1,176 @@
+---
+interface Props {
+  id: string;
+  title: string;
+}
+
+const { id, title } = Astro.props;
+// Más largos que cualquier pantalla: el marco los recorta a su medida.
+const ROW = "-".repeat(400);
+const COLUMN = "|\n".repeat(200);
+---
+
+<dialog class="sheet" id={id} aria-labelledby={`${id}-title`}>
+  <div class="sheet__frame" aria-hidden="true">
+    <span class="sheet__edge sheet__edge--top">{ROW}</span>
+    <span class="sheet__edge sheet__edge--bottom">{ROW}</span>
+    <span class="sheet__edge sheet__edge--left">{COLUMN}</span>
+    <span class="sheet__edge sheet__edge--right">{COLUMN}</span>
+    <span class="sheet__corner sheet__corner--top sheet__corner--left">+</span>
+    <span class="sheet__corner sheet__corner--top sheet__corner--right">+</span>
+    <span class="sheet__corner sheet__corner--bottom sheet__corner--left">+</span>
+    <span class="sheet__corner sheet__corner--bottom sheet__corner--right">+</span>
+  </div>
+  <div class="sheet__body" data-sheet-body>
+    <form method="dialog" class="sheet__bar">
+      <button>[ cerrar ]</button>
+    </form>
+    <h2 id={`${id}-title`}>{title}</h2>
+    <slot />
+  </div>
+</dialog>
+
+<style>
+  /* Una ventana dentro de la página: leer más no saca al visitante del recorrido. */
+  .sheet {
+    width: min(76ch, 100vw - 2 * var(--space-gutter));
+    max-width: none;
+    max-height: calc(100svh - 2 * var(--space-gutter));
+    padding: 0;
+    overflow: hidden;
+    color: var(--color-signal);
+    background: var(--color-void);
+    border: 0;
+  }
+
+  .sheet[open] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sheet::backdrop {
+    background: rgb(0 0 0 / 0.8);
+  }
+
+  /* El texto se desplaza dentro; el marco se queda quieto. */
+  .sheet__body {
+    min-height: 0;
+    /* Un carácter de margen: el texto y su barra quedan dentro del marco. */
+    margin: 1.2em 1ch;
+    padding: 1.4em clamp(0.8em, 5vw, 2.6em);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-dim) transparent;
+    /* Al llegar al final, el scroll no pasa a la página de detrás. */
+    overscroll-behavior: contain;
+  }
+
+  .sheet__body h2 {
+    margin: 0.6em 0 0.4em;
+    font-size: var(--text-lg);
+    line-height: 1.2;
+  }
+
+  .sheet__bar {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .sheet__bar button {
+    padding: 0;
+    font: inherit;
+    font-size: var(--text-sm);
+    color: var(--color-dim);
+    cursor: pointer;
+    background: none;
+    border: 0;
+  }
+
+  .sheet__bar button:hover {
+    color: var(--color-signal);
+  }
+
+  /* El marco son caracteres, como todo lo demás: filas y columnas recortadas. */
+  .sheet__frame {
+    position: absolute;
+    inset: 0;
+    font-size: var(--text-sm);
+    line-height: 1.3;
+    color: var(--color-dim);
+    pointer-events: none;
+  }
+
+  .sheet__edge,
+  .sheet__corner {
+    position: absolute;
+    white-space: pre;
+  }
+
+  .sheet__edge {
+    overflow: hidden;
+  }
+
+  .sheet__edge--top,
+  .sheet__edge--bottom {
+    right: 0;
+    left: 0;
+    height: 1.3em;
+  }
+
+  .sheet__edge--left,
+  .sheet__edge--right {
+    top: 0;
+    bottom: 0;
+    width: 1ch;
+  }
+
+  .sheet__edge--top,
+  .sheet__corner--top {
+    top: 0;
+  }
+
+  .sheet__edge--bottom,
+  .sheet__corner--bottom {
+    bottom: 0;
+  }
+
+  .sheet__edge--left,
+  .sheet__corner--left {
+    left: 0;
+  }
+
+  .sheet__edge--right,
+  .sheet__corner--right {
+    right: 0;
+  }
+
+  /* Las esquinas tapan el cruce de una fila con una columna. */
+  .sheet__corner {
+    background: var(--color-void);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Se enciende como la terminal: una línea que se abre. */
+    .sheet {
+      opacity: 0;
+      transform: scaleY(0.04);
+      transition:
+        opacity 0.2s var(--ease-out),
+        transform 0.25s var(--ease-out),
+        overlay 0.25s allow-discrete,
+        display 0.25s allow-discrete;
+    }
+
+    .sheet[open] {
+      opacity: 1;
+      transform: none;
+    }
+
+    @starting-style {
+      .sheet[open] {
+        opacity: 0;
+        transform: scaleY(0.04);
+      }
+    }
+  }
+</style>
