@@ -8,7 +8,8 @@
     "build": "astro check && astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "prepare:painting": "node scripts/prepare-painting.mjs"
+    "prepare:painting": "node scripts/prepare-painting.mjs",
+    "prepare:share": "node scripts/prepare-share.mjs"
   },
   "dependencies": {
     "astro": "^7.4.4"

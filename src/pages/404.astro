@@ -1,0 +1,38 @@
+---
+import Base from "../layouts/Base.astro";
+import { href } from "../lib/url";
+---
+
+<Base title="Página no encontrada — NeoBmo" description="Esta página no existe." noindex>
+  <main class="reading lost">
+    <p class="lost__line" aria-hidden="true">&gt; 404</p>
+    <h1>Esta página no existe</h1>
+    <p>Puede que el enlace esté mal escrito o que la página haya cambiado de sitio.</p>
+    <a href={href("")}>Volver al inicio</a>
+  </main>
+</Base>
+
+<style>
+  .lost {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 100svh;
+  }
+
+  .lost__line {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-dim);
+  }
+
+  h1 {
+    margin: 0.3em 0 0.4em;
+    font-size: var(--text-lg);
+    line-height: 1.2;
+  }
+
+  a {
+    align-self: flex-start;
+  }
+</style>
