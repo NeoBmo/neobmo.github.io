@@ -8,10 +8,16 @@ import Sections from "../components/Sections.astro";
 
 <Base>
   <Backdrop />
-  <main>
+  <main data-rails>
     <Hero />
     <Sections />
     <Projects />
     <Sections afterProjects />
   </main>
 </Base>
+
+<script>
+  import { mountRails } from "../scripts/rails";
+
+  mountRails();
+</script>

@@ -54,6 +54,20 @@ a {
   padding: var(--space-gutter);
 }
 
+/* Raíles: en la portada, el scroll se detiene en cada parada. Con el dedo lo encaja
+   el navegador; la rueda y el teclado los lleva `rails.ts`. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has([data-rails]) {
+    scroll-snap-type: y mandatory;
+  }
+
+  [data-rails] [data-stop],
+  [data-rails] .scene {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+}
+
 /* Una escena ocupa la pantalla: da recorrido al lienzo y sitio a su símbolo. */
 .scene {
   display: flex;

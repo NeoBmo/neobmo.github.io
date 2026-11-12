@@ -1,4 +1,6 @@
 <section class="hero" aria-labelledby="hero-title" data-hero>
+  <span class="hero__stop" data-stop></span>
+  <span class="hero__stop hero__stop--greeting" data-stop></span>
   <div class="hero__stage">
     <h1 id="hero-title" class="visually-hidden">Luis Rodríguez — NeoBmo</h1>
     <p class="hero__terminal" aria-hidden="true">&gt; <span data-terminal-line></span><span class="hero__cursor">█</span></p>
@@ -18,6 +20,18 @@
   .hero {
     position: relative;
     height: 240svh;
+  }
+
+  /* Paradas de los raíles: la pintura, arriba, y el saludo, al final del recorrido. */
+  .hero__stop {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .hero__stop--greeting {
+    top: calc(100% - 100svh);
   }
 
   .hero__stage {
