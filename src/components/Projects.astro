@@ -13,7 +13,11 @@ const total = String(projects.length).padStart(2, "0");
         Proyectos
       </h2>
       {projects.map(({ id, data }, index) => (
-        <article class="scene reading" data-symbol={data.symbol} aria-labelledby={`${id}-title`}>
+        <article
+          class="scene reading"
+          data-symbol={data.symbol}
+          data-command={`cat proyectos/${id}.md`}
+          aria-labelledby={`${id}-title`}>
           <div class="scene__body">
             <p class="scene__note">
               Proyectos · {String(index + 1).padStart(2, "0")}/{total}

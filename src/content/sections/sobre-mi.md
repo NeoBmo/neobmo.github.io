@@ -1,6 +1,7 @@
 ---
 title: Sobre mí
 summary: Convierto ideas caóticas y procesos anticuados en herramientas simples. Soy desarrollador frontend en Barranquilla, Colombia, y trabajo con React, TypeScript, automatización e IA aplicada.
+command: me llamo Luis Rodríguez
 order: 1
 ---
 

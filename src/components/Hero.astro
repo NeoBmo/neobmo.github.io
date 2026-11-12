@@ -1,7 +1,12 @@
 <section class="hero" aria-labelledby="hero-title" data-hero>
+  <span class="hero__stop" data-stop></span>
+  <span class="hero__stop hero__stop--greeting" data-stop></span>
   <div class="hero__stage">
     <h1 id="hero-title" class="visually-hidden">Luis Rodríguez — NeoBmo</h1>
-    <p class="hero__terminal" aria-hidden="true">&gt; <span data-terminal-line></span><span class="hero__cursor">█</span></p>
+  </div>
+  <div class="hero__terminal" aria-hidden="true" data-terminal>
+    <p class="hero__echo">&gt; <span data-terminal-echo></span></p>
+    <p>&gt; <span data-terminal-line></span><span class="hero__cursor">█</span></p>
   </div>
 </section>
 
@@ -20,6 +25,18 @@
     height: 240svh;
   }
 
+  /* Paradas de los raíles: la pintura, arriba, y el saludo, al final del recorrido. */
+  .hero__stop {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .hero__stop--greeting {
+    top: calc(100% - 100svh);
+  }
+
   .hero__stage {
     position: sticky;
     top: 0;
@@ -27,23 +44,68 @@
     overflow: hidden;
   }
 
+  /* Fija: narra toda la página, no solo el hero. Se escribe a tamaño de lectura y
+     en el hero se amplía con `transform`, que no recalcula el diseño. */
+  .hero {
+    --terminal-zoom: 1.8;
+  }
+
+  @media (min-width: 48rem) {
+    .hero {
+      --terminal-zoom: 2.4;
+    }
+  }
+
+  @media (min-width: 75rem) {
+    .hero {
+      --terminal-zoom: 3.2;
+    }
+  }
+
   .hero__terminal {
-    position: absolute;
+    position: fixed;
     bottom: var(--space-gutter);
     left: var(--space-gutter);
-    margin: 0;
+    z-index: 1;
     padding: 0.1em 0.35em;
-    font-size: var(--text-terminal);
+    font-size: var(--text-base);
     font-weight: 600;
     line-height: 1.3;
     white-space: pre;
     background: var(--color-void);
+    /* Va por encima de las escenas: no debe quitarles los clics. */
+    pointer-events: none;
     opacity: 0;
+    transform: scale(var(--terminal-zoom));
+    transform-origin: left bottom;
     transition: opacity 0.2s var(--ease-out);
+  }
+
+  .hero__terminal p {
+    margin: 0;
+  }
+
+  /* La línea anterior queda como historial; sin texto, no ocupa sitio. */
+  .hero__echo {
+    color: var(--color-dim);
+  }
+
+  .hero__echo:has([data-terminal-echo]:empty) {
+    display: none;
   }
 
   .hero[data-settled] .hero__terminal {
     opacity: 1;
+  }
+
+  /* Al narrar una escena baja a tamaño de lectura, para no competir con ella. */
+  .hero .hero__terminal[data-narrating] {
+    transform: none;
+  }
+
+  /* En el final, su sitio es del panel de contacto. */
+  .hero .hero__terminal[data-quiet] {
+    opacity: 0;
   }
 
   /* Mientras llegan la fuente y la pintura, el prompt espera: nunca una pantalla
@@ -55,15 +117,13 @@
   @media (prefers-reduced-motion: no-preference) {
     /* La consola se enciende como un tubo: una línea que se abre hacia arriba. */
     .hero__terminal {
-      transform: scaleY(0.04);
-      transform-origin: left bottom;
       transition:
         opacity 0.2s var(--ease-out),
-        transform 0.25s var(--ease-out);
+        transform 0.35s var(--ease-out);
     }
 
-    .hero[data-settled] .hero__terminal {
-      transform: none;
+    .hero:not([data-settled]) .hero__terminal {
+      transform: scale(var(--terminal-zoom), calc(var(--terminal-zoom) * 0.04));
     }
 
     .hero__cursor {
@@ -80,7 +140,7 @@
   @keyframes prompt-wait {
     to {
       opacity: 1;
-      transform: none;
+      transform: scale(var(--terminal-zoom));
     }
   }
 

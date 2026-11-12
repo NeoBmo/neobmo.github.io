@@ -28,6 +28,7 @@ const year = new Date().getFullYear();
         class:list={["scene", data.finale ? "finale" : "reading"]}
         id={id}
         data-symbol={data.symbol}
+        data-command={data.finale ? undefined : (data.command ?? `cat ${id}.md`)}
         data-finale={data.finale ? "" : undefined}
         aria-labelledby={`${id}-title`}
       >
