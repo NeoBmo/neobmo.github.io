@@ -4,10 +4,12 @@ import Backdrop from "../components/Backdrop.astro";
 import Hero from "../components/Hero.astro";
 import Projects from "../components/Projects.astro";
 import Sections from "../components/Sections.astro";
+import Waypoints from "../components/Waypoints.astro";
 ---
 
 <Base>
   <Backdrop />
+  <Waypoints />
   <main data-rails>
     <Hero />
     <Sections />
@@ -19,7 +21,9 @@ import Sections from "../components/Sections.astro";
 <script>
   import { mountRails } from "../scripts/rails";
   import { mountSheets } from "../scripts/sheets";
+  import { mountWaypoints } from "../scripts/waypoints";
 
   mountRails();
   mountSheets();
+  mountWaypoints();
 </script>

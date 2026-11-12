@@ -21,7 +21,8 @@ const total = String(projects.length).padStart(2, "0");
         <article
           class="scene reading"
           data-symbol={data.symbol}
-          data-command={`cat proyectos/${id}.md`}
+          id={`proyecto-${id}`}
+          data-command={data.command ?? data.title}
           aria-labelledby={`${id}-title`}>
           <div class="scene__body">
             <p class="scene__note">

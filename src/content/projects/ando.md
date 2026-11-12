@@ -3,6 +3,7 @@ title: Ando
 status: próximamente
 strength: Aprender a construir para el teléfono
 summary: Mi primera aplicación móvil. Está en planificación y empezando a construirse.
+command: así aprendo apps móviles
 symbol: phone
 order: 4
 ---

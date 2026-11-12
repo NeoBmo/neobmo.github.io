@@ -4,6 +4,7 @@ status: piloto
 strength: Gestión y manejo de información
 summary: Gestión de cobros con cartera, cajas, cobradores y trazabilidad financiera. Tiene un piloto desplegado.
 stack: [Next.js, React, TypeScript, Supabase]
+command: gestión de cobros, en piloto
 symbol: ledger
 order: 2
 ---
