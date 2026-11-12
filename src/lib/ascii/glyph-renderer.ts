@@ -72,6 +72,7 @@ uniform sampler2D atlas;
 uniform sampler2D paint;
 uniform float glyphCount;
 uniform float aspect;
+uniform float inset;
 uniform vec4 grid;
 uniform float canvasHeight;
 uniform float color;
@@ -81,6 +82,9 @@ varying float offset;
 void main() {
   float u = (gl_PointCoord.x - 0.5) / aspect + 0.5;
   if (u < 0.0 || u > 1.0) discard;
+  // Medio píxel hacia dentro: en el borde exacto de la celda se colaría el
+  // carácter vecino del atlas y dejaría una raya.
+  u = clamp(u, inset, 1.0 - inset);
   float alpha = texture2D(atlas, vec2(offset + u / glyphCount, gl_PointCoord.y)).a * opacity;
   vec2 pixel = vec2(gl_FragCoord.x, canvasHeight - gl_FragCoord.y);
   vec3 tint = texture2D(paint, (pixel - grid.xy) / grid.zw).rgb;
@@ -164,6 +168,7 @@ function webglRenderer(
     gl.uniform2f(uniform("viewport"), width, height);
     gl.uniform1f(uniform("pointSize"), atlas.cellHeight * pixelRatio);
     gl.uniform1f(uniform("aspect"), atlas.cellWidth / atlas.cellHeight);
+    gl.uniform1f(uniform("inset"), 0.5 / atlas.sourceWidth);
     gl.uniform1f(uniform("canvasHeight"), canvas.height);
     gl.uniform4f(
       uniform("grid"),
