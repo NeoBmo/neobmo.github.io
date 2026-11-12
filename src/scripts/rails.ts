@@ -2,8 +2,17 @@
 const STEP_LOCK_MS = 450;
 /** Pausa entre eventos de rueda que separa un gesto del siguiente. */
 const GESTURE_GAP_MS = 180;
-/** Un empujón así de mayor que el evento anterior también es un gesto nuevo. */
+/**
+ * Un empujón así de mayor que los eventos recientes también es un gesto nuevo,
+ * si además supera un mínimo: la cola de una inercia salta entre 1 y 3 píxeles y
+ * esas subidas no son gestos.
+ */
 const GESTURE_SURGE = 1.6;
+const GESTURE_MIN = 40;
+/** Cuánto se olvida, por evento, el pico reciente de la rueda. */
+const PEAK_DECAY = 0.8;
+/** Píxeles por línea cuando el navegador mide la rueda en líneas. */
+const LINE_HEIGHT = 16;
 /** Margen, en píxeles, para decidir si ya se está en una parada. */
 const SLACK = 2;
 
@@ -52,14 +61,21 @@ export function mountRails() {
       return list.find((stop) => stop.top > here + SLACK)?.top;
     }
 
-    let previous: number | undefined;
-    for (const stop of list) if (stop.top < here - SLACK) previous = stop.top;
-    return previous;
+    // Dentro de una escena alta también se sube leyendo, con el scroll normal.
+    if (current?.bottom && here > current.top + SLACK && tall(current)) return undefined;
+
+    let previous: Stop | undefined;
+    for (const stop of list) if (stop.top < here - SLACK) previous = stop;
+    if (!previous) return undefined;
+    // A una escena alta se entra por su final, no por su principio.
+    return previous.bottom && tall(previous) ? previous.bottom - innerHeight : previous.top;
   };
+
+  const tall = (stop: Stop) => stop.bottom !== undefined && stop.bottom - stop.top > innerHeight + SLACK;
 
   let lockedUntil = 0;
   let lastWheel = 0;
-  let lastSize = 0;
+  let peak = 0;
 
   const step = (direction: 1 | -1, now: number) => {
     const top = destination(direction);
@@ -78,13 +94,22 @@ export function mountRails() {
       if (reducedMotion.matches || event.ctrlKey) return;
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
 
-      const size = Math.abs(event.deltaY);
+      // Algunos navegadores miden la rueda en líneas o en páginas, no en píxeles.
+      const unit =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? LINE_HEIGHT
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? innerHeight
+            : 1;
+      const size = Math.abs(event.deltaY) * unit;
       // La inercia de un trackpad manda decenas de eventos cada vez más pequeños:
-      // solo empieza un gesto tras una pausa o con un empujón claramente mayor.
+      // solo empieza un gesto tras una pausa o con un empujón claramente mayor
+      // que el pico reciente.
       const fresh =
-        event.timeStamp - lastWheel > GESTURE_GAP_MS || size > lastSize * GESTURE_SURGE;
+        event.timeStamp - lastWheel > GESTURE_GAP_MS ||
+        (size >= GESTURE_MIN && size > peak * GESTURE_SURGE);
       lastWheel = event.timeStamp;
-      lastSize = size;
+      peak = Math.max(size, peak * PEAK_DECAY);
 
       const direction = event.deltaY > 0 ? 1 : -1;
       if (destination(direction) === undefined) return;
