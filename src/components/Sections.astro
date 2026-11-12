@@ -11,41 +11,69 @@ const { afterProjects = false } = Astro.props;
 const sections = (await getCollection("sections"))
   .filter(({ data }) => data.afterProjects === afterProjects)
   .sort((a, b) => a.data.order - b.data.order);
+const year = new Date().getFullYear();
 ---
 
 {
-  sections.map(({ id, data }) => (
-    <section class="scene reading" id={id} data-symbol={data.symbol} aria-labelledby={`${id}-title`}>
-      <div class={data.symbol ? "scene__body" : "plain"}>
-        {data.kicker && <p class="scene__note">{data.kicker}</p>}
-        <h2 id={`${id}-title`}>{data.title}</h2>
-        <p>{data.summary}</p>
-        {data.steps.length > 0 && (
-          <ol class="steps" role="list">
-            {data.steps.map((step) => (
-              <li>{step}</li>
-            ))}
-          </ol>
-        )}
-        {data.symbol ? (
-          <p class="scene__links">
-            {data.repo && (
-              <a href={data.repo} aria-label={`Ver el repositorio de ${data.title}`}>
-                Ver repositorio
-              </a>
-            )}
-            <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`}>
-              Seguir leyendo
-            </a>
-          </p>
-        ) : (
-          <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`}>
-            Seguir leyendo
-          </a>
-        )}
-      </div>
-    </section>
-  ))
+  sections.map(({ id, data, body }) => {
+    // Solo las secciones con cuerpo tienen página propia a la que seguir leyendo.
+    const more = body?.trim() && (
+      <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`}>
+        Seguir leyendo
+      </a>
+    );
+
+    return (
+      <section
+        class:list={["scene", data.finale ? "finale" : "reading"]}
+        id={id}
+        data-symbol={data.symbol}
+        data-finale={data.finale ? "" : undefined}
+        aria-labelledby={`${id}-title`}
+      >
+        <div class={data.finale ? "panel" : data.symbol ? "scene__body" : "plain"}>
+          {data.kicker && <p class="scene__note">{data.kicker}</p>}
+          <h2 id={`${id}-title`}>{data.title}</h2>
+          <p>{data.summary}</p>
+          {data.steps.length > 0 && (
+            <ol class="steps" role="list">
+              {data.steps.map((step) => (
+                <li>{step}</li>
+              ))}
+            </ol>
+          )}
+          {data.links.length > 0 && (
+            <ul class="scene__links contact" role="list">
+              {data.links.map(({ label, url }) => (
+                <li>
+                  <a href={url} rel="me">
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {data.symbol ? (
+            <p class="scene__links">
+              {data.repo && (
+                <a href={data.repo} aria-label={`Ver el repositorio de ${data.title}`}>
+                  Ver repositorio
+                </a>
+              )}
+              {more}
+            </p>
+          ) : (
+            more
+          )}
+          {data.finale && (
+            <footer class="scene__note signature">
+              <span aria-hidden="true">\|°</span> NeoBmo · {year}
+            </footer>
+          )}
+        </div>
+      </section>
+    );
+  })
 }
 
 <style>
@@ -54,8 +82,9 @@ const sections = (await getCollection("sections"))
     display: contents;
   }
 
-  /* Solo en las escenas con símbolo: las demás conservan el título de siempre. */
-  .scene__body h2 {
+  /* Solo en las escenas con símbolo o panel: las demás conservan el título de siempre. */
+  .scene__body h2,
+  .panel h2 {
     margin: 0.3em 0 0.4em;
     font-size: var(--text-lg);
     line-height: 1.2;
@@ -80,5 +109,32 @@ const sections = (await getCollection("sections"))
 
   .steps li::before {
     content: counter(step, decimal-leading-zero) " ";
+  }
+
+  /* El final: la pintura vuelve entera y el texto va en un panel abajo, como la terminal del inicio. */
+  .finale {
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding: var(--space-gutter);
+  }
+
+  /* Fondo opaco: es lo que deja leer el texto encima de la pintura a pleno color. */
+  .panel {
+    max-width: 40ch;
+    padding: var(--space-gutter);
+    background: var(--color-void);
+  }
+
+  .panel h2 {
+    margin-top: 0;
+  }
+
+  .contact {
+    padding: 0;
+    list-style: none;
+  }
+
+  .signature {
+    margin-top: 2em;
   }
 </style>

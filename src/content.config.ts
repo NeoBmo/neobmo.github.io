@@ -40,8 +40,12 @@ const sections = defineCollection({
     repo: z.url().optional(),
     /** Figura que forman los caracteres del lienzo al llegar a la sección. */
     symbol: z.enum(SYMBOL_NAMES).optional(),
+    /** Enlaces de contacto. */
+    links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),
     /** La sección va después de los proyectos y no antes. */
     afterProjects: z.boolean().default(false),
+    /** Es el final de la página: al llegar, el lienzo vuelve a la pintura. */
+    finale: z.boolean().default(false),
     order: z.number(),
   }),
 });

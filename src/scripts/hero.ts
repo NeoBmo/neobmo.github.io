@@ -7,6 +7,7 @@ import { clamp, lerp, smoothstep } from "../lib/ascii/math";
 import {
   DISSOLVE_DURATION,
   DISSOLVE_START,
+  FINALE_HOLD,
   HORIZON_ALPHA,
   LOGO_AT,
   LOGO_SCROLL,
@@ -138,6 +139,10 @@ export async function mountHero(section: HTMLElement) {
   const scenes = [...document.querySelectorAll<HTMLElement>("[data-symbol]")];
   const symbols = scenes.map((scene) => SYMBOLS[scene.dataset.symbol as SymbolName] ?? []);
   let scenery = 0;
+  // El final de la página: de 0 a 1 mientras entra, el lienzo rebobina hasta la pintura.
+  const ending = document.querySelector<HTMLElement>("[data-finale]");
+  const leaving = ending?.previousElementSibling;
+  let finale = 0;
   // Un solo número recorre toda la obra: 0–1 pintura → logo, 1–2 logo → línea,
   // 2–3 la línea sube a horizonte detrás del contenido.
   let position = 0;
@@ -242,16 +247,20 @@ export async function mountHero(section: HTMLElement) {
     const dissolve = introHolds
       ? clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION)
       : clamp(progress / LOGO_SCROLL);
+    // El final multiplica todo el recorrido por lo que falta: lo lleva a cero pasando
+    // por cada figura, y al subir lo rehace en el mismo orden.
     const target =
-      dissolve + (introRunning ? 0 : stageAt(afterLogo(progress)) + horizon + scenery);
+      (dissolve + (introRunning ? 0 : stageAt(afterLogo(progress)) + horizon + scenery)) *
+      (1 - finale);
+    const veilTarget = horizon * (1 - finale);
 
     // La intro va exacta al reloj; después los caracteres persiguen al scroll,
     // así que incluso un salto brusco, en cualquier sentido, viaja suave.
     if (introRunning) position = target;
     else position += (target - position) * Math.min(delta * STAGE_RESPONSE, 1);
     if (Math.abs(target - position) < 0.001) position = target;
-    veil += (horizon - veil) * Math.min(delta * STAGE_RESPONSE, 1);
-    if (Math.abs(horizon - veil) < 0.001) veil = horizon;
+    veil += (veilTarget - veil) * Math.min(delta * STAGE_RESPONSE, 1);
+    if (Math.abs(veilTarget - veil) < 0.001) veil = veilTarget;
 
     const stirring = now - lastPointer < POINTER_HOLD_MS;
     force += ((stirring ? 1 : 0) - force) * Math.min(delta * POINTER_RESPONSE, 1);
@@ -289,7 +298,7 @@ export async function mountHero(section: HTMLElement) {
         // Figura quieta y en su destino: el bucle se detiene hasta el próximo gesto.
         // El primer fotograma tras reanudar no mide tiempo: se espera al siguiente
         // para que el gesto que lo despertó llegue a notarse.
-        if (position === target && veil === horizon && delta > 0 && !stirring) pause();
+        if (position === target && veil === veilTarget && delta > 0 && !stirring) pause();
         return;
       }
     }
@@ -362,6 +371,15 @@ export async function mountHero(section: HTMLElement) {
     progress = heroProgress;
     horizon = horizonProgress;
     scenery = sceneAt();
+    const screen = window.innerHeight;
+    const entered = ending && screen > 0 ? 1 - ending.getBoundingClientRect().top / screen : 0;
+    finale = smoothstep(FINALE_HOLD, 1, entered);
+    // Sin movimiento no hay rebobinado: el texto anterior se queda como está.
+    if (leaving instanceof HTMLElement) {
+      leaving.style.opacity = reducedMotion.matches
+        ? ""
+        : String(1 - smoothstep(0, FINALE_HOLD, entered));
+    }
     play();
   });
 
