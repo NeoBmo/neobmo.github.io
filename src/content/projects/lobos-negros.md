@@ -6,6 +6,7 @@ summary: El sitio de un club de taekwondo, hecho solo con HTML, CSS y JavaScript
 stack: [HTML, CSS, JavaScript]
 repo: https://github.com/NeoBmo/LobosNegros
 site: https://clublobosnegros.netlify.app
+command: mi proyecto más personal
 symbol: tag
 order: 3
 ---

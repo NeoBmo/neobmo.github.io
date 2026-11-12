@@ -22,6 +22,8 @@ const projects = defineCollection({
     repo: z.url().optional(),
     /** Dónde se puede abrir el proyecto, si es público. */
     site: z.url().optional(),
+    /** Lo que dice la terminal al llegar, en lenguaje llano; por defecto, el título. */
+    command: z.string().optional(),
     /** Figura que forman los caracteres del lienzo al llegar al proyecto. */
     symbol: z.enum(SYMBOL_NAMES),
     order: z.number(),
@@ -40,7 +42,7 @@ const sections = defineCollection({
     repo: z.url().optional(),
     /** Figura que forman los caracteres del lienzo al llegar a la sección. */
     symbol: z.enum(SYMBOL_NAMES).optional(),
-    /** Lo que escribe la terminal al llegar; por defecto, `cat <archivo>.md`. */
+    /** Lo que dice la terminal al llegar, en lenguaje llano; por defecto, el título. */
     command: z.string().optional(),
     /** Enlaces de contacto. */
     links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),

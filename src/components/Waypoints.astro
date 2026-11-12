@@ -1,0 +1,110 @@
+---
+import { getCollection } from "astro:content";
+
+const byOrder = <T extends { data: { order: number } }>(a: T, b: T) => a.data.order - b.data.order;
+const sections = (await getCollection("sections")).sort(byOrder);
+const projects = (await getCollection("projects")).sort(byOrder);
+const link = ({ id, data }: { id: string; data: { title: string } }) => ({
+  target: id,
+  label: data.title,
+});
+
+// El mismo orden que la portada: inicio, secciones, proyectos y el resto.
+const stops = [
+  { target: "inicio", label: "Inicio" },
+  ...sections.filter(({ data }) => !data.afterProjects).map(link),
+  ...projects.map(({ id, data }) => ({ target: `proyecto-${id}`, label: data.title })),
+  ...sections.filter(({ data }) => data.afterProjects).map(link),
+];
+---
+
+<nav class="waypoints" aria-label="Paradas de la página" data-waypoints>
+  <ol role="list">
+    {
+      stops.map(({ target, label }) => (
+        <li>
+          <a href={`#${target}`} data-label={label}>
+            <span class="visually-hidden">{label}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+
+<style>
+  /* Sin barra de scroll, esto dice dónde se está, cuánto falta y deja saltar. */
+  .waypoints {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    z-index: 1;
+    font-size: var(--text-sm);
+    line-height: 1;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 0.4s var(--ease-out);
+  }
+
+  /* Aparece con la terminal, cuando el logo ya está formado: la pintura va sola. */
+  :global(body:has([data-hero][data-settled])) .waypoints {
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* El punto es pequeño, pero el área que se toca no baja de 24 px. */
+  a {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: max(var(--space-gutter), 1.5rem);
+    height: 1.5rem;
+    color: var(--color-dim);
+    text-decoration: none;
+  }
+
+  a::before {
+    font-size: 1.5em;
+    content: "·";
+  }
+
+  /* La parada actual es el cursor de la terminal. */
+  a[aria-current]::before {
+    font-size: 0.7em;
+    color: var(--color-signal);
+    content: "█";
+  }
+
+  a::after {
+    position: absolute;
+    right: 100%;
+    padding: 0.3em 0.6em;
+    color: var(--color-signal);
+    white-space: nowrap;
+    pointer-events: none;
+    content: attr(data-label);
+    background: var(--color-void);
+    opacity: 0;
+  }
+
+  a:focus-visible::after {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    a:hover {
+      color: var(--color-signal);
+    }
+
+    a:hover::after {
+      opacity: 1;
+    }
+  }
+</style>
