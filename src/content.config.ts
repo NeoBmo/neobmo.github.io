@@ -40,6 +40,8 @@ const sections = defineCollection({
     repo: z.url().optional(),
     /** Figura que forman los caracteres del lienzo al llegar a la sección. */
     symbol: z.enum(SYMBOL_NAMES).optional(),
+    /** Lo que escribe la terminal al llegar; por defecto, `cat <archivo>.md`. */
+    command: z.string().optional(),
     /** Enlaces de contacto. */
     links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),
     /** La sección va después de los proyectos y no antes. */
