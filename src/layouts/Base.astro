@@ -1,19 +1,25 @@
 ---
 import "../styles/global.css";
 import fontUrl from "../assets/fonts/jetbrains-mono.woff2?url";
+import { href } from "../lib/url";
 
 interface Props {
   title?: string;
   description?: string;
+  /** La página no debe salir en buscadores (la de error, por ejemplo). */
+  noindex?: boolean;
 }
 
 const {
   title = "Luis Rodríguez — NeoBmo",
   description = "Convierto ideas caóticas y procesos anticuados en herramientas simples.",
+  noindex = false,
 } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const base = import.meta.env.BASE_URL;
+// La imagen de las vistas previas: los servicios la piden con dirección completa.
+const share = new URL(href("share.png"), Astro.site);
 ---
 
 <!doctype html>
@@ -25,6 +31,7 @@ const base = import.meta.env.BASE_URL;
     <meta name="description" content={description} />
     <meta name="author" content="Luis Rodríguez" />
     <meta name="theme-color" content="#000000" />
+    {noindex && <meta name="robots" content="noindex" />}
     <link rel="canonical" href={canonical} />
     <link rel="icon" href={`${base.replace(/\/?$/, "/")}favicon.svg`} type="image/svg+xml" />
     <link rel="preload" href={fontUrl} as="font" type="font/woff2" crossorigin />
@@ -33,6 +40,12 @@ const base = import.meta.env.BASE_URL;
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:locale" content="es_CO" />
+    <meta property="og:site_name" content="NeoBmo" />
+    <meta property="og:image" content={share} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Logo de NeoBmo: una barra inclinada, una barra y un círculo" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <slot />
