@@ -4,7 +4,8 @@ import Base from "../layouts/Base.astro";
 import { href } from "../lib/url";
 
 export async function getStaticPaths() {
-  const sections = await getCollection("sections");
+  // Una sección sin cuerpo vive solo en la portada: no tiene página propia.
+  const sections = (await getCollection("sections")).filter(({ body }) => body?.trim());
   return sections.map((section) => ({ params: { section: section.id }, props: { section } }));
 }
 
