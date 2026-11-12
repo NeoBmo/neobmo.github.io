@@ -80,7 +80,7 @@ function storeQuality(level: number) {
 }
 
 /** Un clic aquí ya tiene su propio efecto: no lanza onda. */
-const INTERACTIVE = "a, button, input, select, textarea, summary, label";
+const INTERACTIVE = "a, button, input, select, textarea, summary, label, dialog";
 
 /** Below this aspect ratio the vertical composition fits better. */
 const PORTRAIT_QUERY = "(max-aspect-ratio: 6/7)";

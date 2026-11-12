@@ -73,6 +73,9 @@ export function mountRails() {
 
   const tall = (stop: Stop) => stop.bottom !== undefined && stop.bottom - stop.top > innerHeight + SLACK;
 
+  /** Con una ventana de lectura abierta, la rueda y las teclas son suyas. */
+  const reading = () => document.querySelector("dialog[open]") !== null;
+
   let lockedUntil = 0;
   let lastWheel = 0;
   let peak = 0;
@@ -91,7 +94,7 @@ export function mountRails() {
     "wheel",
     (event) => {
       // Con Ctrl la rueda hace zoom; en horizontal no es un cambio de escena.
-      if (reducedMotion.matches || event.ctrlKey) return;
+      if (reducedMotion.matches || event.ctrlKey || reading()) return;
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
 
       // Algunos navegadores miden la rueda en líneas o en páginas, no en píxeles.
@@ -121,7 +124,7 @@ export function mountRails() {
   );
 
   addEventListener("keydown", (event) => {
-    if (reducedMotion.matches || event.defaultPrevented) return;
+    if (reducedMotion.matches || event.defaultPrevented || reading()) return;
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest(TYPING)) return;

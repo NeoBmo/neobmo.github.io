@@ -1,5 +1,6 @@
 ---
-import { getCollection } from "astro:content";
+import { getCollection, render } from "astro:content";
+import Sheet from "./Sheet.astro";
 import { href } from "../lib/url";
 
 interface Props {
@@ -8,17 +9,21 @@ interface Props {
 }
 
 const { afterProjects = false } = Astro.props;
-const sections = (await getCollection("sections"))
+const entries = (await getCollection("sections"))
   .filter(({ data }) => data.afterProjects === afterProjects)
   .sort((a, b) => a.data.order - b.data.order);
+// El texto completo de cada sección va en la portada, en su ventana de lectura.
+const sections = await Promise.all(
+  entries.map(async (entry) => ({ ...entry, Content: (await render(entry)).Content })),
+);
 const year = new Date().getFullYear();
 ---
 
 {
-  sections.map(({ id, data, body }) => {
-    // Solo las secciones con cuerpo tienen página propia a la que seguir leyendo.
+  sections.map(({ id, data, body, Content }) => {
+    // Solo las secciones con cuerpo tienen algo más que leer.
     const more = body?.trim() && (
-      <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`}>
+      <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`} data-sheet={`leer-${id}`}>
         Seguir leyendo
       </a>
     );
@@ -72,6 +77,11 @@ const year = new Date().getFullYear();
             </footer>
           )}
         </div>
+        {more && (
+          <Sheet id={`leer-${id}`} title={data.title}>
+            <Content />
+          </Sheet>
+        )}
       </section>
     );
   })
