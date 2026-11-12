@@ -139,7 +139,7 @@ export async function mountHero(section: HTMLElement) {
   const scenes = [...document.querySelectorAll<HTMLElement>("[data-symbol]")];
   const symbols = scenes.map((scene) => SYMBOLS[scene.dataset.symbol as SymbolName] ?? []);
   let scenery = 0;
-  // El final de la página: de 0 a 1 mientras entra, el lienzo rebobina hasta la pintura.
+  // El final de la página: de 0 a 1 mientras entra, el lienzo rebobina hasta el logo.
   const ending = document.querySelector<HTMLElement>("[data-finale]");
   const leaving = ending?.previousElementSibling;
   let finale = 0;
@@ -247,11 +247,11 @@ export async function mountHero(section: HTMLElement) {
     const dissolve = introHolds
       ? clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION)
       : clamp(progress / LOGO_SCROLL);
-    // El final multiplica todo el recorrido por lo que falta: lo lleva a cero pasando
-    // por cada figura, y al subir lo rehace en el mismo orden.
-    const target =
-      (dissolve + (introRunning ? 0 : stageAt(afterLogo(progress)) + horizon + scenery)) *
-      (1 - finale);
+    // El final multiplica por lo que falta todo lo recorrido después del logo: lo
+    // deshace pasando por cada figura hasta dejar el logo, y al subir lo rehace en
+    // el mismo orden. La pintura no vuelve: es solo del principio.
+    const journey = introRunning ? 0 : stageAt(afterLogo(progress)) + horizon + scenery;
+    const target = dissolve + journey * (1 - finale);
     const veilTarget = horizon * (1 - finale);
 
     // La intro va exacta al reloj; después los caracteres persiguen al scroll,

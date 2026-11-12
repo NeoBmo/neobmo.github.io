@@ -40,7 +40,7 @@ export const SCENE_HOLD = 0.25;
 
 /**
  * Parte de la última pantalla que el lienzo espera antes de empezar a rebobinar
- * hacia la pintura. En ese tramo se apaga el texto de la escena anterior, para que
+ * hacia el logo. En ese tramo se apaga el texto de la escena anterior, para que
  * las figuras del rebobinado no se dibujen encima de él.
  */
 export const FINALE_HOLD = 0.3;

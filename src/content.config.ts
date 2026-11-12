@@ -46,7 +46,7 @@ const sections = defineCollection({
     links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),
     /** La sección va después de los proyectos y no antes. */
     afterProjects: z.boolean().default(false),
-    /** Es el final de la página: al llegar, el lienzo vuelve a la pintura. */
+    /** Es el final de la página: al llegar, el lienzo vuelve al logo. */
     finale: z.boolean().default(false),
     order: z.number(),
   }),
