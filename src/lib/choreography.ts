@@ -45,6 +45,14 @@ export const SCENE_HOLD = 0.25;
  */
 export const FINALE_HOLD = 0.3;
 
+/**
+ * Con la figura quieta solo se mueve el ruido de fondo: se dibuja a este ritmo, y
+ * tras este rato sin gestos el lienzo se duerme hasta el siguiente. Es lo que
+ * cuida la batería de un teléfono.
+ */
+export const AMBIENT_FRAME_MS = 1000 / 20;
+export const AMBIENT_REST_MS = 20_000;
+
 /** Opacidad del lienzo cuando hay texto encima. */
 export const HORIZON_ALPHA = 0.4;
 

@@ -2,9 +2,11 @@ import landscapeUrl from "../assets/starry-night.webp?url";
 import portraitUrl from "../assets/starry-night-portrait.webp?url";
 import logoUrl from "../assets/logo.svg?url";
 import { loadImageField, type ImageField } from "../lib/ascii/image-field";
-import { Convergence, WAVE_STRIDE, type Painting } from "../lib/ascii/convergence";
+import { CALM_STRIDE, Convergence, WAVE_STRIDE, type Painting } from "../lib/ascii/convergence";
 import { clamp, lerp, smoothstep } from "../lib/ascii/math";
 import {
+  AMBIENT_FRAME_MS,
+  AMBIENT_REST_MS,
   DISSOLVE_DURATION,
   DISSOLVE_START,
   FINALE_HOLD,
@@ -79,6 +81,9 @@ function storeQuality(level: number) {
   }
 }
 
+/** Zonas de texto que el ruido de fondo respeta a la vez: las escenas en pantalla. */
+const MAX_CALM = 3;
+
 /** Un clic aquí ya tiene su propio efecto: no lanza onda. */
 const INTERACTIVE = "a, button, input, select, textarea, summary, label, dialog";
 
@@ -139,6 +144,13 @@ export async function mountHero(section: HTMLElement) {
   const scenes = [...document.querySelectorAll<HTMLElement>("[data-symbol]")];
   const symbols = scenes.map((scene) => SYMBOLS[scene.dataset.symbol as SymbolName] ?? []);
   let scenery = 0;
+  // El texto de cada escena: donde está, el ruido de fondo se apaga.
+  const texts = [...document.querySelectorAll<HTMLElement>(".scene")];
+  const range = document.createRange();
+  const zones = new Float32Array(MAX_CALM * CALM_STRIDE);
+  // El ruido se mueve solo: se dibuja despacio y se duerme si nadie hace nada.
+  let lastDraw = 0;
+  let lastInput = performance.now();
   // El final de la página: de 0 a 1 mientras entra, el lienzo rebobina hasta el logo.
   const ending = document.querySelector<HTMLElement>("[data-finale]");
   const leaving = ending?.previousElementSibling;
@@ -190,7 +202,8 @@ export async function mountHero(section: HTMLElement) {
     scene.dim(reducedMotion.matches ? 1 : lerp(1, HORIZON_ALPHA, veil));
     if (reducedMotion.matches) return scene.render(elapsed, true);
     scene.disturb(pointerX, pointerY, force, sway, waves, waveCount);
-    if (position > 1) scene.renderFormation(position - 1, elapsed);
+    // Desde el logo mandan las figuras, con el ruido de fondo alrededor.
+    if (position >= 1) scene.renderFormation(position - 1, elapsed);
     else scene.render(elapsed, false, position);
   };
 
@@ -223,6 +236,8 @@ export async function mountHero(section: HTMLElement) {
     laidOut = key;
 
     scene.layout(width, height, pixelRatio, painting, logo, glyphScale, symbols, isPortrait);
+    // Con otro tamaño de pantalla el texto cambia de sitio: se vuelve a medir.
+    calm();
     draw();
 
     if (ready) return;
@@ -295,15 +310,18 @@ export async function mountHero(section: HTMLElement) {
     // la figura no haya cambiado.
     if (position === drawnPosition && veil === drawnVeil && !stirred && !drawnStirred) {
       if (position >= 1) {
-        // Figura quieta y en su destino: el bucle se detiene hasta el próximo gesto.
+        // Figura quieta y en su destino: solo queda el ruido de fondo, que se dibuja
+        // despacio. Tras un rato sin gestos, el bucle se detiene hasta el próximo.
         // El primer fotograma tras reanudar no mide tiempo: se espera al siguiente
         // para que el gesto que lo despertó llegue a notarse.
-        if (position === target && veil === veilTarget && delta > 0 && !stirring) pause();
-        return;
+        const settled = position === target && veil === veilTarget && delta > 0 && !stirring;
+        if (settled && now - lastInput > AMBIENT_REST_MS) return pause();
+        if (now - lastDraw < AMBIENT_FRAME_MS) return;
       }
     }
 
     section.toggleAttribute("data-settled", position >= 1);
+    lastDraw = now;
     draw();
     // Solo se mide durante la intro, que es cuando viajan todos los caracteres, y
     // nunca en el último nivel, donde ya no hay nada que decidir.
@@ -345,6 +363,32 @@ export async function mountHero(section: HTMLElement) {
     frame = 0;
   };
 
+  /** Un gesto del visitante: despierta el lienzo y reinicia la cuenta del descanso. */
+  const wake = () => {
+    lastInput = performance.now();
+    play();
+  };
+
+  /** Dónde está el texto de las escenas en pantalla, para que el ruido lo respete. */
+  const calm = () => {
+    let count = 0;
+    for (const text of texts) {
+      if (count === MAX_CALM) break;
+      const box = text.getBoundingClientRect();
+      if (box.bottom <= 0 || box.top >= window.innerHeight) continue;
+      // El contenido y no la caja: una escena ocupa la pantalla, su texto no.
+      range.selectNodeContents(text);
+      const { left, top, right, bottom } = range.getBoundingClientRect();
+      if (right <= left || bottom <= top) continue;
+      zones[count * CALM_STRIDE] = left;
+      zones[count * CALM_STRIDE + 1] = top;
+      zones[count * CALM_STRIDE + 2] = right;
+      zones[count * CALM_STRIDE + 3] = bottom;
+      count++;
+    }
+    scene.calm(zones, count);
+  };
+
   /**
    * Qué escena está en pantalla: 0 antes de la primera, 1 con la primera centrada,
    * 2 con la segunda, etc. Entre dos, el símbolo se sostiene y luego cambia.
@@ -380,7 +424,8 @@ export async function mountHero(section: HTMLElement) {
         ? ""
         : String(1 - smoothstep(0, FINALE_HOLD, entered));
     }
-    play();
+    calm();
+    wake();
   });
 
   section.toggleAttribute("data-settled", reducedMotion.matches);
@@ -396,7 +441,7 @@ export async function mountHero(section: HTMLElement) {
       pointerY = targetY;
     }
     lastPointer = performance.now();
-    play();
+    wake();
   };
   addEventListener("pointermove", stir, { passive: true });
   addEventListener("pointerdown", stir, { passive: true });
@@ -410,7 +455,7 @@ export async function mountHero(section: HTMLElement) {
     if (event.target instanceof Element && event.target.closest(INTERACTIVE)) return;
     if (ripples.length === MAX_WAVES) ripples.shift();
     ripples.push({ x: event.clientX, y: event.clientY, start: performance.now() });
-    play();
+    wake();
   });
 
   // Los observadores van antes del primer dibujo: si el lienzo aún no tiene tamaño,

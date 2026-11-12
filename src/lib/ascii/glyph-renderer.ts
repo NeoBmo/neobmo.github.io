@@ -14,8 +14,9 @@ export interface GlyphStage {
   grid: { x: number; y: number; width: number; height: number };
 }
 
-/** Valores por carácter en la lista que recibe `draw`: x, y, glifo y escala. */
-export const GLYPH_STRIDE = 4;
+/** Valores por carácter en la lista que recibe `draw`: x, y, glifo, escala y opacidad. */
+export const GLYPH_STRIDE = 5;
+const BYTES = Float32Array.BYTES_PER_ELEMENT;
 
 export interface GlyphRenderer {
   setup(stage: GlyphStage): void;
@@ -50,16 +51,19 @@ export function createGlyphRenderer(
 // franja central, porque la celda es más estrecha que alta.
 const VERTEX = `
 attribute vec4 glyph;
+attribute float fade;
 uniform vec2 viewport;
 uniform float pointSize;
 uniform float glyphCount;
 varying float offset;
+varying float visible;
 
 void main() {
   vec2 clip = glyph.xy / viewport * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
   gl_PointSize = pointSize * glyph.w;
   offset = glyph.z / glyphCount;
+  visible = fade;
 }`;
 
 const FRAGMENT = `
@@ -78,6 +82,7 @@ uniform float canvasHeight;
 uniform float color;
 uniform float opacity;
 varying float offset;
+varying float visible;
 
 void main() {
   float u = (gl_PointCoord.x - 0.5) / aspect + 0.5;
@@ -85,7 +90,7 @@ void main() {
   // Medio píxel hacia dentro: en el borde exacto de la celda se colaría el
   // carácter vecino del atlas y dejaría una raya.
   u = clamp(u, inset, 1.0 - inset);
-  float alpha = texture2D(atlas, vec2(offset + u / glyphCount, gl_PointCoord.y)).a * opacity;
+  float alpha = texture2D(atlas, vec2(offset + u / glyphCount, gl_PointCoord.y)).a * opacity * visible;
   vec2 pixel = vec2(gl_FragCoord.x, canvasHeight - gl_FragCoord.y);
   vec3 tint = texture2D(paint, (pixel - grid.xy) / grid.zw).rgb;
   gl_FragColor = vec4(mix(vec3(1.0), tint, color) * alpha, alpha);
@@ -139,7 +144,10 @@ function webglRenderer(
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     const glyph = gl.getAttribLocation(program, "glyph");
     gl.enableVertexAttribArray(glyph);
-    gl.vertexAttribPointer(glyph, GLYPH_STRIDE, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(glyph, 4, gl.FLOAT, false, GLYPH_STRIDE * BYTES, 0);
+    const fade = gl.getAttribLocation(program, "fade");
+    gl.enableVertexAttribArray(fade);
+    gl.vertexAttribPointer(fade, 1, gl.FLOAT, false, GLYPH_STRIDE * BYTES, 4 * BYTES);
 
     atlasTexture = texture(0);
     paintTexture = texture(1);
@@ -223,6 +231,7 @@ function canvasRenderer(canvas: HTMLCanvasElement, context: CanvasRenderingConte
       for (let i = 0; i < count * GLYPH_STRIDE; i += GLYPH_STRIDE) {
         const drawWidth = cellWidth * glyphs[i + 3];
         const drawHeight = cellHeight * glyphs[i + 3];
+        context.globalAlpha = glyphs[i + 4];
         context.drawImage(
           atlas.canvas,
           glyphs[i + 2] * sourceWidth, 0, sourceWidth, sourceHeight,
@@ -230,6 +239,7 @@ function canvasRenderer(canvas: HTMLCanvasElement, context: CanvasRenderingConte
         );
       }
 
+      context.globalAlpha = 1;
       if (color > 0) {
         // Tiñe solo lo ya dibujado: los caracteres toman el color de la pintura.
         context.globalCompositeOperation = "source-atop";

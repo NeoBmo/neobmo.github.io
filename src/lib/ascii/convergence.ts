@@ -72,6 +72,19 @@ const WAVE_PUSH = 1.4;
 /** Valores por onda en la lista que recibe `disturb`: x, y, radio e intensidad. */
 export const WAVE_STRIDE = 4;
 
+/**
+ * Ruido de fondo: caracteres sueltos que llenan el negro y de los que salen las
+ * figuras. Cuántos hay, como parte de las celdas de la pantalla, y cuánto se ven.
+ */
+const AMBIENT_DENSITY = 0.05;
+const AMBIENT_ALPHA = 0.26;
+/** Cuánto se aleja cada uno de su sitio al vagar, en alturas de celda. */
+const AMBIENT_DRIFT = 1.4;
+/** Distancia, en alturas de celda, a la que el ruido se apaga junto a una zona de calma. */
+const CALM_MARGIN = 3;
+/** Valores por zona en la lista que recibe `calm`: izquierda, arriba, derecha y abajo. */
+export const CALM_STRIDE = 4;
+
 /** Una figura hecha de caracteres: el carácter `order[j]` va a la posición `j`. */
 interface Formation {
   x: Float32Array;
@@ -81,6 +94,8 @@ interface Formation {
   glyph: Uint8Array;
   /** Tamaño de cada carácter respecto a su celda. */
   scale: number;
+  /** Rectángulo que ocupa: izquierda, arriba, derecha y abajo. */
+  box: readonly [number, number, number, number];
 }
 
 export interface ConvergenceOptions {
@@ -142,6 +157,19 @@ export class Convergence {
   private fade = new Float32Array(0);
   private order = new Uint32Array(0);
   private formations: Formation[] = [];
+  // Los primeros `alive` caracteres de `order` nunca desaparecen: cuando ninguna
+  // figura los usa, vagan como ruido alrededor de su sitio.
+  private alive = 0;
+  private ambient = new Uint8Array(0);
+  private ambientX = new Float32Array(0);
+  private ambientY = new Float32Array(0);
+  private zones: Float32Array = new Float32Array(0);
+  private zoneCount = 0;
+  // Las dos figuras del fotograma también apartan el ruido, cada una con su peso.
+  private nearBox: Formation["box"] = NO_BOX;
+  private nearWeight = 0;
+  private farBox: Formation["box"] = NO_BOX;
+  private farWeight = 0;
   private pointerX = 0;
   private pointerY = 0;
   private force = 0;
@@ -241,6 +269,15 @@ export class Convergence {
   }
 
   /**
+   * Fija dónde se apaga el ruido de fondo: los rectángulos de texto de la página,
+   * en píxeles del lienzo.
+   */
+  calm(zones: Float32Array, count: number) {
+    this.zones = zones;
+    this.zoneCount = count;
+  }
+
+  /**
    * Dibuja el viaje entre formaciones. `stage` 1.5 es la mitad del camino entre
    * la formación 1 y la 2, así que el scroll puede moverla en ambos sentidos.
    */
@@ -253,8 +290,13 @@ export class Convergence {
     let filled = 0;
 
     const flicker = Math.floor(time * 12);
-    const total = Math.max(start.size, end.size);
+    const total = Math.max(start.size, end.size, this.alive);
     const stirred = this.force > 0 || this.sway !== 0 || this.waveCount > 0;
+    const faint = this.ambientAlpha();
+    this.nearBox = start.box;
+    this.nearWeight = 1 - mix;
+    this.farBox = end.box;
+    this.farWeight = mix;
 
     for (let j = 0; j < total; j++) {
       const n = order[j];
@@ -264,8 +306,30 @@ export class Convergence {
       let y: number;
       let glyph: number;
       let scale: number;
+      let alpha = 1;
 
-      if (inStart && inEnd) {
+      if (j < this.alive && inStart !== inEnd) {
+        // Entra en la figura desde el ruido, o vuelve a él al salir.
+        const local = easeInOutCubic(clamp((mix - this.logoDelay[n]) / LOGO_TRAVEL));
+        const formed = inStart ? 1 - local : local;
+        const shape = inStart ? start : end;
+        this.ambientAt(n, time);
+        x = lerp(this.atX, shape.x[j], formed);
+        y = lerp(this.atY, shape.y[j], formed);
+        scale = lerp(1, shape.scale, formed);
+        alpha = lerp(faint * this.clearAt(x, y), 1, formed);
+        if (formed > 0.9) glyph = shape.glyph[j];
+        else if (formed < 0.1) glyph = this.ambientGlyph(n, time);
+        else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
+      } else if (j < this.alive && !inStart) {
+        this.ambientAt(n, time);
+        x = this.atX;
+        y = this.atY;
+        alpha = faint * this.clearAt(x, y);
+        if (alpha < 0.01) continue;
+        glyph = this.ambientGlyph(n, time);
+        scale = 1;
+      } else if (inStart && inEnd) {
         const local = easeInOutCubic(clamp((mix - this.logoDelay[n]) / LOGO_TRAVEL));
         x = lerp(start.x[j], end.x[j], local);
         y = lerp(start.y[j], end.y[j], local);
@@ -299,6 +363,7 @@ export class Convergence {
       batch[filled++] = y;
       batch[filled++] = glyph;
       batch[filled++] = scale;
+      batch[filled++] = alpha;
     }
 
     this.renderer.draw(batch, filled / GLYPH_STRIDE, 0, this.opacity);
@@ -319,11 +384,21 @@ export class Convergence {
 
     const flicker = Math.floor(time * 12);
     const stirred = !still && (this.force > 0 || this.sway !== 0 || this.waveCount > 0);
+    const faint = this.ambientAlpha();
+    this.nearBox = this.formations[0]?.box ?? NO_BOX;
+    this.nearWeight = dissolve;
+    this.farWeight = 0;
 
     for (let i = 0; i < this.count; i++) {
       if (t < this.appear[i]) continue;
-      // Los caracteres que no forman el logo desaparecen uno a uno, sin transparencia.
-      if (!this.inLogo[i] && dissolve > this.fade[i]) continue;
+      // De los caracteres que no forman el logo, unos se quedan como ruido de fondo
+      // y el resto desaparece uno a uno, sin transparencia.
+      let scatter = 0;
+      if (!this.inLogo[i]) {
+        if (this.ambient[i]) {
+          scatter = easeInOutCubic(clamp((dissolve - this.logoDelay[i]) / LOGO_TRAVEL));
+        } else if (dissolve > this.fade[i]) continue;
+      }
       const toLogo = this.inLogo[i]
         ? easeInOutCubic(clamp((dissolve - this.logoDelay[i]) / LOGO_TRAVEL))
         : 0;
@@ -364,11 +439,22 @@ export class Convergence {
         if (strength > POINTER_NOISE) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
       }
 
+      let alpha = 1;
+      if (scatter > 0) {
+        this.ambientAt(i, time);
+        x = lerp(x, this.atX, scatter);
+        y = lerp(y, this.atY, scatter);
+        alpha = lerp(1, faint * this.clearAt(x, y), scatter);
+        if (scatter > 0.9) glyph = this.ambientGlyph(i, time);
+        else if (scatter > 0.1) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
+      }
+
       if (glyph === EMPTY) continue;
       batch[filled++] = x;
       batch[filled++] = y;
       batch[filled++] = glyph;
       batch[filled++] = 1;
+      batch[filled++] = alpha;
     }
 
     this.renderer.draw(batch, filled / GLYPH_STRIDE, color, this.opacity);
@@ -420,6 +506,44 @@ export class Convergence {
   /** Fija la opacidad del próximo dibujo, para que el texto de encima se lea. */
   dim(alpha: number) {
     this.opacity = alpha;
+  }
+
+  /** El ruido se ve igual de tenue esté como esté atenuado el lienzo entero. */
+  private ambientAlpha() {
+    return Math.min(1, AMBIENT_ALPHA / Math.max(this.opacity, AMBIENT_ALPHA));
+  }
+
+  /** Deja en `atX`/`atY` dónde vaga ahora el carácter `n` cuando es ruido. */
+  private ambientAt(n: number, time: number) {
+    const reach = this.atlas.cellHeight * AMBIENT_DRIFT;
+    const seed = this.noise[n];
+    // Dos ritmos distintos por eje: el vaivén no se repite a la vista.
+    this.atX = this.ambientX[n] + Math.sin(time * (0.2 + seed * 0.3) + seed * 40) * reach;
+    this.atY = this.ambientY[n] + Math.cos(time * (0.15 + seed * 0.25) + seed * 71) * reach;
+  }
+
+  /** Cada carácter del ruido cambia a su ritmo, de vez en cuando. */
+  private ambientGlyph(n: number, time: number) {
+    const seed = this.noise[n];
+    return NOISE_INDEX[(Math.floor(time * (0.3 + seed) + seed * 13) + ((seed * 997) | 0)) % NOISE_INDEX.length];
+  }
+
+  /**
+   * Cuánto ruido cabe en (x, y): 1 en campo abierto, 0 dentro de una zona de
+   * calma (texto o figura) y un degradado en su borde.
+   */
+  private clearAt(x: number, y: number) {
+    const margin = this.atlas.cellHeight * CALM_MARGIN;
+    let quiet = Math.max(
+      this.nearWeight * inside(this.nearBox, x, y, margin),
+      this.farWeight * inside(this.farBox, x, y, margin),
+    );
+    const { zones } = this;
+    for (let z = 0; z < this.zoneCount * CALM_STRIDE && quiet < 1; z += CALM_STRIDE) {
+      const outside = Math.max(zones[z] - x, x - zones[z + 2], zones[z + 1] - y, y - zones[z + 3], 0);
+      quiet = Math.max(quiet, 1 - smoothstep(0, margin, outside));
+    }
+    return 1 - quiet;
   }
 
   /** Averages the covered image over each cell; the browser does the filtering. */
@@ -580,6 +704,18 @@ export class Convergence {
       [this.order[i], this.order[j]] = [this.order[j], this.order[i]];
     }
 
+    // El ruido de fondo: una parte de los caracteres, repartida por toda la pantalla.
+    this.alive = Math.min(count, Math.round(this.cols * this.rows * AMBIENT_DENSITY));
+    this.ambient = new Uint8Array(count);
+    this.ambientX = new Float32Array(count);
+    this.ambientY = new Float32Array(count);
+    for (let j = 0; j < this.alive; j++) {
+      const n = this.order[j];
+      this.ambient[n] = 1;
+      this.ambientX[n] = random() * this.width;
+      this.ambientY[n] = random() * this.height;
+    }
+
     this.formations = [
       this.logoFormation(logo),
       this.lineFormation(EXIT_LINE_TOP),
@@ -652,7 +788,7 @@ export class Convergence {
       }
     }
 
-    return { x, y, size, glyph, scale };
+    return { x, y, size, glyph, scale, box: boxOf(x, y, size) };
   }
 
   private lineFormation(topRatio: number) {
@@ -662,7 +798,7 @@ export class Convergence {
     const x = new Float32Array(size);
     const y = new Float32Array(size).fill(height * topRatio);
     for (let j = 0; j < size; j++) x[j] = this.gridX + (j + 0.5) * cellWidth;
-    return { x, y, size, glyph: new Uint8Array(size).fill(LINE_GLYPH), scale: 1 };
+    return { x, y, size, glyph: new Uint8Array(size).fill(LINE_GLYPH), scale: 1, box: boxOf(x, y, size) };
   }
 
   /** Convierte en celdas lo que `draw` pinta en una capa del tamaño de la figura. */
@@ -704,7 +840,7 @@ export class Convergence {
       }
     }
 
-    return { x, y, size, glyph, scale };
+    return { x, y, size, glyph, scale, box: boxOf(x, y, size) };
   }
 
   /** Deja en `atX`/`atY` el punto del viaje de la pintura al logo. */
@@ -748,13 +884,39 @@ export class Convergence {
   }
 }
 
+/** Un rectángulo que no contiene nada: el de una figura vacía. */
+const NO_BOX = [Infinity, Infinity, -Infinity, -Infinity] as const;
+
 const emptyFormation = (): Formation => ({
   x: new Float32Array(0),
   y: new Float32Array(0),
   size: 0,
   glyph: new Uint8Array(0),
   scale: 1,
+  box: NO_BOX,
 });
+
+/** Rectángulo que ocupan las primeras `size` posiciones. */
+function boxOf(x: Float32Array, y: Float32Array, size: number): Formation["box"] {
+  if (size < 1) return NO_BOX;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (let j = 0; j < size; j++) {
+    left = Math.min(left, x[j]);
+    right = Math.max(right, x[j]);
+    top = Math.min(top, y[j]);
+    bottom = Math.max(bottom, y[j]);
+  }
+  return [left, top, right, bottom];
+}
+
+/** 1 dentro del rectángulo, 0 a más de `margin` de él y un degradado entre medias. */
+function inside(box: Formation["box"], x: number, y: number, margin: number) {
+  const outside = Math.max(box[0] - x, x - box[2], box[1] - y, y - box[3], 0);
+  return 1 - smoothstep(0, margin, outside);
+}
 
 /**
  * Stretches luminance between its 2nd and 98th percentiles, then lifts the
