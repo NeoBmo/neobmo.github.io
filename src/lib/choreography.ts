@@ -26,6 +26,12 @@ export const SWAY_FULL = 3;
 /** Qué tan rápido el arrastre sigue a la velocidad del scroll, por segundo. */
 export const SWAY_RESPONSE = 7;
 
+/** Lo que dura la onda de un clic y hasta dónde llega, como parte de la diagonal. */
+export const WAVE_DURATION_MS = 1400;
+export const WAVE_REACH = 0.6;
+/** Ondas a la vez: una más sustituye a la más antigua. */
+export const MAX_WAVES = 3;
+
 /** Opacidad del lienzo cuando hay texto encima. */
 export const HORIZON_ALPHA = 0.4;
 

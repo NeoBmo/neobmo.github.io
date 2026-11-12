@@ -2,7 +2,7 @@ import landscapeUrl from "../assets/starry-night.webp?url";
 import portraitUrl from "../assets/starry-night-portrait.webp?url";
 import logoUrl from "../assets/logo.svg?url";
 import { loadImageField, type ImageField } from "../lib/ascii/image-field";
-import { Convergence, type Painting } from "../lib/ascii/convergence";
+import { Convergence, WAVE_STRIDE, type Painting } from "../lib/ascii/convergence";
 import { clamp, lerp } from "../lib/ascii/math";
 import {
   DISSOLVE_DURATION,
@@ -11,12 +11,15 @@ import {
   LOGO_AT,
   LOGO_SCROLL,
   MAX_RATE,
+  MAX_WAVES,
   POINTER_HOLD_MS,
   POINTER_RESPONSE,
   RATE_RESPONSE,
   STAGE_RESPONSE,
   SWAY_FULL,
   SWAY_RESPONSE,
+  WAVE_DURATION_MS,
+  WAVE_REACH,
   afterLogo,
   stageAt,
 } from "../lib/choreography";
@@ -72,6 +75,9 @@ function storeQuality(level: number) {
     // Sin almacenamiento (modo privado), cada visita vuelve a medir.
   }
 }
+
+/** Un clic aquí ya tiene su propio efecto: no lanza onda. */
+const INTERACTIVE = "a, button, input, select, textarea, summary, label";
 
 /** Below this aspect ratio the vertical composition fits better. */
 const PORTRAIT_QUERY = "(max-aspect-ratio: 6/7)";
@@ -145,6 +151,10 @@ export async function mountHero(section: HTMLElement) {
   let sway = 0;
   let lastScrollY = 0;
   let drawnStirred = false;
+  // Cada clic lanza una onda que crece desde su punto y se apaga sola.
+  const ripples: { x: number; y: number; start: number }[] = [];
+  const waves = new Float32Array(MAX_WAVES * WAVE_STRIDE);
+  let waveCount = 0;
   // La intro mantiene el logo hasta que el visitante baja; desde ahí manda el scroll,
   // así que al volver arriba la pintura se queda quieta y no se disuelve sola.
   let introHolds = true;
@@ -165,10 +175,10 @@ export async function mountHero(section: HTMLElement) {
   const draw = () => {
     drawnPosition = position;
     drawnVeil = veil;
-    drawnStirred = force > 0 || sway !== 0;
+    drawnStirred = force > 0 || sway !== 0 || waveCount > 0;
     scene.dim(reducedMotion.matches ? 1 : lerp(1, HORIZON_ALPHA, veil));
     if (reducedMotion.matches) return scene.render(elapsed, true);
-    scene.disturb(pointerX, pointerY, force, sway);
+    scene.disturb(pointerX, pointerY, force, sway, waves, waveCount);
     if (position > 1) scene.renderFormation(position - 1, elapsed);
     else scene.render(elapsed, false, position);
   };
@@ -250,7 +260,20 @@ export async function mountHero(section: HTMLElement) {
     lastScrollY = window.scrollY;
     sway += (clamp(speed / SWAY_FULL, -1, 1) - sway) * Math.min(delta * SWAY_RESPONSE, 1);
     if (speed === 0 && Math.abs(sway) < 0.001) sway = 0;
-    const stirred = force > 0 || sway !== 0;
+
+    while (ripples.length && now - ripples[0].start >= WAVE_DURATION_MS) ripples.shift();
+    waveCount = ripples.length;
+    const reach = Math.hypot(window.innerWidth, window.innerHeight) * WAVE_REACH;
+    for (let index = 0; index < waveCount; index++) {
+      const { x, y, start } = ripples[index];
+      // El anillo sale rápido y frena; su fuerza se apaga antes de llegar al final.
+      const fading = (1 - clamp((now - start) / WAVE_DURATION_MS)) ** 2;
+      waves[index * WAVE_STRIDE] = x;
+      waves[index * WAVE_STRIDE + 1] = y;
+      waves[index * WAVE_STRIDE + 2] = (1 - fading) * reach;
+      waves[index * WAVE_STRIDE + 3] = fading;
+    }
+    const stirred = force > 0 || sway !== 0 || waveCount > 0;
 
     // Mientras el visitante lo altera, o justo después, hay que redibujar aunque
     // la figura no haya cambiado.
@@ -330,6 +353,18 @@ export async function mountHero(section: HTMLElement) {
   addEventListener("pointermove", stir, { passive: true });
   addEventListener("pointerdown", stir, { passive: true });
 
+  // `click` y no `pointerdown`: en un teléfono, el dedo que empieza un scroll
+  // también dispara `pointerdown`; `click` solo llega con un toque de verdad.
+  addEventListener("click", (event) => {
+    if (reducedMotion.matches || !ready) return;
+    // Un clic hecho con el teclado no tiene punto de origen: llegaría en la esquina.
+    if (event.detail === 0) return;
+    if (event.target instanceof Element && event.target.closest(INTERACTIVE)) return;
+    if (ripples.length === MAX_WAVES) ripples.shift();
+    ripples.push({ x: event.clientX, y: event.clientY, start: performance.now() });
+    play();
+  });
+
   // Los observadores van antes del primer dibujo: si el lienzo aún no tiene tamaño,
   // serán ellos quienes lo dibujen cuando lo tenga.
   let resizeTimer = 0;
@@ -343,6 +378,8 @@ export async function mountHero(section: HTMLElement) {
     pause();
     force = 0;
     sway = 0;
+    ripples.length = 0;
+    waveCount = 0;
     section.toggleAttribute("data-settled", reducedMotion.matches);
     if (ready) draw();
     play();

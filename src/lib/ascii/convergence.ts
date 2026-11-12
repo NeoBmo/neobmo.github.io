@@ -53,6 +53,11 @@ const POINTER_PUSH = 0.3;
 const POINTER_NOISE = 0.35;
 /** Celdas que arrastra el scroll a máxima velocidad. */
 const SWAY_CELLS = 1.6;
+/** Medio grosor del anillo de una onda y cuánto empuja, en alturas de celda. */
+const WAVE_WIDTH = 3;
+const WAVE_PUSH = 1.4;
+/** Valores por onda en la lista que recibe `disturb`: x, y, radio e intensidad. */
+export const WAVE_STRIDE = 4;
 
 /** Una figura hecha de caracteres: el carácter `order[j]` va a la posición `j`. */
 interface Formation {
@@ -128,6 +133,8 @@ export class Convergence {
   private pointerY = 0;
   private force = 0;
   private sway = 0;
+  private waves: Float32Array = new Float32Array(0);
+  private waveCount = 0;
   private pushX = 0;
   private pushY = 0;
   // Las posiciones se devuelven aquí y no en un array: un objeto por carácter y
@@ -198,13 +205,23 @@ export class Convergence {
 
   /**
    * Fija cómo altera el visitante el próximo dibujo: `force` (0–1) aparta los
-   * caracteres del puntero y `sway` (-1 a 1) los arrastra con el scroll.
+   * caracteres del puntero, `sway` (-1 a 1) los arrastra con el scroll y cada
+   * onda de `waves` los empuja al pasar su anillo.
    */
-  disturb(pointerX: number, pointerY: number, force: number, sway: number) {
+  disturb(
+    pointerX: number,
+    pointerY: number,
+    force: number,
+    sway: number,
+    waves: Float32Array,
+    waveCount: number,
+  ) {
     this.pointerX = pointerX;
     this.pointerY = pointerY;
     this.force = force;
     this.sway = sway;
+    this.waves = waves;
+    this.waveCount = waveCount;
   }
 
   /**
@@ -221,7 +238,7 @@ export class Convergence {
 
     const flicker = Math.floor(time * 12);
     const total = Math.max(start.size, end.size);
-    const stirred = this.force > 0 || this.sway !== 0;
+    const stirred = this.force > 0 || this.sway !== 0 || this.waveCount > 0;
 
     for (let j = 0; j < total; j++) {
       const n = order[j];
@@ -285,7 +302,7 @@ export class Convergence {
     let filled = 0;
 
     const flicker = Math.floor(time * 12);
-    const stirred = !still && (this.force > 0 || this.sway !== 0);
+    const stirred = !still && (this.force > 0 || this.sway !== 0 || this.waveCount > 0);
 
     for (let i = 0; i < this.count; i++) {
       if (t < this.appear[i]) continue;
@@ -343,27 +360,44 @@ export class Convergence {
 
   /**
    * Calcula en `pushX`/`pushY` cuánto se mueve el carácter `n`, que está en (x, y):
-   * el scroll lo arrastra sobre el eje dado y el puntero lo aparta. Devuelve la
-   * intensidad del puntero sobre él, de 0 a 1.
+   * el scroll lo arrastra sobre el eje dado, el puntero lo aparta y las ondas lo
+   * empujan. Devuelve la intensidad con la que lo tocan, de 0 a 1.
    */
   private pushAt(x: number, y: number, n: number, axisX: number, axisY: number) {
     const { cellWidth, cellHeight } = this.atlas;
     const drift = this.sway * (0.4 + this.noise[n]) * cellWidth * SWAY_CELLS;
     this.pushX = axisX * drift;
     this.pushY = axisY * drift;
-    if (this.force <= 0) return 0;
+    let strength = 0;
 
     const radius = cellHeight * POINTER_RADIUS;
     const dx = x - this.pointerX;
     const dy = y - this.pointerY;
     const squared = dx * dx + dy * dy;
-    if (squared >= radius * radius) return 0;
+    if (this.force > 0 && squared < radius * radius) {
+      const distance = Math.sqrt(squared);
+      strength = (1 - distance / radius) ** 2 * this.force;
+      const reach = (radius * POINTER_PUSH * strength) / Math.max(distance, 1);
+      this.pushX += dx * reach;
+      this.pushY += dy * reach;
+    }
 
-    const distance = Math.sqrt(squared);
-    const strength = (1 - distance / radius) ** 2 * this.force;
-    const reach = (radius * POINTER_PUSH * strength) / Math.max(distance, 1);
-    this.pushX += dx * reach;
-    this.pushY += dy * reach;
+    // Cada onda es un anillo: solo empuja a quien está cerca de su borde.
+    const { waves } = this;
+    const band = cellHeight * WAVE_WIDTH;
+    for (let w = 0; w < this.waveCount * WAVE_STRIDE; w += WAVE_STRIDE) {
+      const fromX = x - waves[w];
+      const fromY = y - waves[w + 1];
+      const distance = Math.sqrt(fromX * fromX + fromY * fromY);
+      const offset = Math.abs(distance - waves[w + 2]);
+      if (offset >= band) continue;
+      const crest = (1 - offset / band) ** 2 * waves[w + 3];
+      const reach = (cellHeight * WAVE_PUSH * crest) / Math.max(distance, 1);
+      this.pushX += fromX * reach;
+      this.pushY += fromY * reach;
+      if (crest > strength) strength = crest;
+    }
+
     return strength;
   }
 
