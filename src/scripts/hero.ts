@@ -150,7 +150,7 @@ export async function mountHero(section: HTMLElement) {
   const zones = new Float32Array(MAX_CALM * CALM_STRIDE);
   // El ruido se mueve solo: se dibuja despacio y se duerme si nadie hace nada.
   let lastDraw = 0;
-  let lastInput = 0;
+  let lastInput = performance.now();
   // El final de la página: de 0 a 1 mientras entra, el lienzo rebobina hasta el logo.
   const ending = document.querySelector<HTMLElement>("[data-finale]");
   const leaving = ending?.previousElementSibling;
@@ -236,6 +236,8 @@ export async function mountHero(section: HTMLElement) {
     laidOut = key;
 
     scene.layout(width, height, pixelRatio, painting, logo, glyphScale, symbols, isPortrait);
+    // Con otro tamaño de pantalla el texto cambia de sitio: se vuelve a medir.
+    calm();
     draw();
 
     if (ready) return;
