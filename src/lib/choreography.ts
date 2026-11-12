@@ -28,7 +28,7 @@ export const SWAY_RESPONSE = 7;
 
 /** Lo que dura la onda de un clic y hasta dónde llega, como parte de la diagonal. */
 export const WAVE_DURATION_MS = 1400;
-export const WAVE_REACH = 0.6;
+export const WAVE_REACH = 0.3;
 /** Ondas a la vez: una más sustituye a la más antigua. */
 export const MAX_WAVES = 3;
 
