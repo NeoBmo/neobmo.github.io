@@ -13,17 +13,34 @@ interface Props {
 }
 
 const { project } = Astro.props;
+const { title, status, strength, summary, stack, site, repo } = project.data;
 const { Content } = await render(project);
 ---
 
-<Base title={`${project.data.title} — NeoBmo`} description={project.data.summary}>
-  <main>
+<Base title={`${title} — NeoBmo`} description={summary}>
+  <main class="reading">
     <a href={href("#proyectos")}>Volver</a>
     <article>
-      <h1>{project.data.title}</h1>
-      <p>{project.data.status} · {project.data.strength}</p>
-      {project.data.repo && <a href={project.data.repo}>Repositorio</a>}
+      <h1>{title}</h1>
+      <p>{status} · {strength}</p>
+      {stack.length > 0 && <p>{stack.join(" · ")}</p>}
+      {
+        (site || repo) && (
+          <p class="links">
+            {site && <a href={site}>Ver sitio</a>}
+            {repo && <a href={repo}>Ver código</a>}
+          </p>
+        )
+      }
       <Content />
     </article>
   </main>
 </Base>
+
+<style>
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6em 1.6em;
+  }
+</style>

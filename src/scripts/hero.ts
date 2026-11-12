@@ -3,7 +3,7 @@ import portraitUrl from "../assets/starry-night-portrait.webp?url";
 import logoUrl from "../assets/logo.svg?url";
 import { loadImageField, type ImageField } from "../lib/ascii/image-field";
 import { Convergence, WAVE_STRIDE, type Painting } from "../lib/ascii/convergence";
-import { clamp, lerp } from "../lib/ascii/math";
+import { clamp, lerp, smoothstep } from "../lib/ascii/math";
 import {
   DISSOLVE_DURATION,
   DISSOLVE_START,
@@ -15,6 +15,7 @@ import {
   POINTER_HOLD_MS,
   POINTER_RESPONSE,
   RATE_RESPONSE,
+  SCENE_HOLD,
   STAGE_RESPONSE,
   SWAY_FULL,
   SWAY_RESPONSE,
@@ -23,6 +24,7 @@ import {
   afterLogo,
   stageAt,
 } from "../lib/choreography";
+import { SYMBOLS, type SymbolName } from "../lib/symbols";
 import { mountTerminal } from "./terminal";
 
 const FONT_FAMILY = '"JetBrains Mono", monospace';
@@ -132,6 +134,10 @@ export async function mountHero(section: HTMLElement) {
   let rate = 1;
   let progress = 0;
   let horizon = 0;
+  // Las escenas que siguen al horizonte: cada una anuncia su símbolo en la página.
+  const scenes = [...document.querySelectorAll<HTMLElement>("[data-symbol]")];
+  const symbols = scenes.map((scene) => SYMBOLS[scene.dataset.symbol as SymbolName] ?? []);
+  let scenery = 0;
   // Un solo número recorre toda la obra: 0–1 pintura → logo, 1–2 logo → línea,
   // 2–3 la línea sube a horizonte detrás del contenido.
   let position = 0;
@@ -211,7 +217,7 @@ export async function mountHero(section: HTMLElement) {
     if (run !== layoutRun) return;
     laidOut = key;
 
-    scene.layout(width, height, pixelRatio, painting, logo, glyphScale);
+    scene.layout(width, height, pixelRatio, painting, logo, glyphScale, symbols, isPortrait);
     draw();
 
     if (ready) return;
@@ -236,7 +242,8 @@ export async function mountHero(section: HTMLElement) {
     const dissolve = introHolds
       ? clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION)
       : clamp(progress / LOGO_SCROLL);
-    const target = dissolve + (introRunning ? 0 : stageAt(afterLogo(progress)) + horizon);
+    const target =
+      dissolve + (introRunning ? 0 : stageAt(afterLogo(progress)) + horizon + scenery);
 
     // La intro va exacta al reloj; después los caracteres persiguen al scroll,
     // así que incluso un salto brusco, en cualquier sentido, viaja suave.
@@ -329,9 +336,32 @@ export async function mountHero(section: HTMLElement) {
     frame = 0;
   };
 
+  /**
+   * Qué escena está en pantalla: 0 antes de la primera, 1 con la primera centrada,
+   * 2 con la segunda, etc. Entre dos, el símbolo se sostiene y luego cambia.
+   */
+  const sceneAt = () => {
+    const middle = window.innerHeight / 2;
+    // La primera empieza a formarse cuando está una pantalla por debajo del centro.
+    let span = window.innerHeight;
+    let above = 0;
+    for (let index = 0; index < scenes.length; index++) {
+      const rect = scenes[index].getBoundingClientRect();
+      const below = rect.top + rect.height / 2 - middle;
+      if (index > 0) span = below - above;
+      if (below > 0) {
+        const arrived = span > 0 ? clamp(1 - below / span) : 1;
+        return index + smoothstep(SCENE_HOLD, 1 - SCENE_HOLD, arrived);
+      }
+      above = below;
+    }
+    return scenes.length;
+  };
+
   mountTerminal(section, (heroProgress, horizonProgress) => {
     progress = heroProgress;
     horizon = horizonProgress;
+    scenery = sceneAt();
     play();
   });
 

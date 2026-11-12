@@ -32,6 +32,12 @@ export const WAVE_REACH = 0.3;
 /** Ondas a la vez: una más sustituye a la más antigua. */
 export const MAX_WAVES = 3;
 
+/**
+ * Parte del recorrido entre dos proyectos en la que el símbolo se queda quieto, a
+ * cada lado: así se sostiene mientras el proyecto está en pantalla.
+ */
+export const SCENE_HOLD = 0.25;
+
 /** Opacidad del lienzo cuando hay texto encima. */
 export const HORIZON_ALPHA = 0.4;
 

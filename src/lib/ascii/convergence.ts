@@ -1,7 +1,7 @@
 import type { ImageField } from "./image-field";
 import { createGlyphAtlas, type GlyphAtlas } from "./glyph-atlas";
 import { GLYPH_STRIDE, createGlyphRenderer, type GlyphRenderer } from "./glyph-renderer";
-import { EMPTY, LOGO_INDEX, NOISE_INDEX, glyphFor } from "./glyphs";
+import { EMPTY, GLYPHS, LOGO_INDEX, NOISE_INDEX, glyphFor } from "./glyphs";
 import { clamp, createRandom, easeInOutCubic, easeOutCubic, lerp, smoothstep } from "./math";
 
 /**
@@ -45,6 +45,19 @@ const LINE_GLYPH = glyphFor(0.5, 0, 1);
 /** Altura de la línea de salida del hero y del horizonte que queda tras él. */
 const EXIT_LINE_TOP = 0.8;
 const HORIZON_TOP = 0.08;
+
+/**
+ * Dónde se forma el símbolo de un proyecto y cuánto puede ocupar, como parte de la
+ * pantalla: a la derecha del texto en horizontal y sobre él en vertical.
+ */
+const SYMBOL_WIDE = { x: 0.76, y: 0.5, width: 0.28, height: 0.4 };
+const SYMBOL_TALL = { x: 0.5, y: 0.24, width: 0.7, height: 0.26 };
+const SYMBOL_MAX_SCALE = 2.2;
+/**
+ * Los caracteres se dibujan una vez al doble de tamaño: así los símbolos, que los
+ * amplían, siguen nítidos.
+ */
+const ATLAS_DETAIL = 2;
 
 /** Radio de la perturbación del puntero, en alturas de celda, y cuánto empuja. */
 const POINTER_RADIUS = 6;
@@ -160,6 +173,9 @@ export class Convergence {
     logo: HTMLImageElement,
     /** Agranda los caracteres: menos que dibujar en equipos que no llegan. */
     glyphScale = 1,
+    /** Arte ASCII de cada escena que sigue al horizonte, en orden. */
+    symbols: readonly (readonly string[])[] = [],
+    portrait = false,
   ) {
     this.field = painting.field;
     this.focus = painting.focus;
@@ -170,7 +186,7 @@ export class Convergence {
 
     // Menos de 10.5 px satura las pantallas pequeñas: más caracteres que dibujar y menos pintura.
     const fontSize = Math.round(clamp(width / 120, 10.5, 14) * glyphScale * 2) / 2;
-    this.atlas = createGlyphAtlas(fontSize, pixelRatio, this.fontFamily);
+    this.atlas = createGlyphAtlas(fontSize, pixelRatio * ATLAS_DETAIL, this.fontFamily);
     const { cellWidth, cellHeight } = this.atlas;
 
     this.cols = Math.ceil(width / cellWidth);
@@ -187,7 +203,7 @@ export class Convergence {
     };
 
     this.populate(this.sampleCells());
-    this.buildFormations(logo);
+    this.buildFormations(logo, symbols, portrait, pixelRatio);
     this.renderer.setup({
       width,
       height,
@@ -536,7 +552,12 @@ export class Convergence {
   }
 
   /** Prepara las figuras en orden: logo, línea de salida y horizonte. */
-  private buildFormations(logo: HTMLImageElement) {
+  private buildFormations(
+    logo: HTMLImageElement,
+    symbols: readonly (readonly string[])[],
+    portrait: boolean,
+    pixelRatio: number,
+  ) {
     const { count } = this;
     const random = createRandom(this.seed + 1);
 
@@ -563,6 +584,7 @@ export class Convergence {
       this.logoFormation(logo),
       this.lineFormation(EXIT_LINE_TOP),
       this.lineFormation(HORIZON_TOP),
+      ...symbols.map((art) => this.artFormation(art, portrait, pixelRatio)),
     ];
 
     const [logoShape] = this.formations;
@@ -587,6 +609,50 @@ export class Convergence {
     return this.maskFormation(cols, rows, 1, LOGO_TOP, (context) => {
       context.drawImage(logo, 0, 0, cols, rows);
     });
+  }
+
+  /** Convierte un dibujo de arte ASCII en figura: cada carácter ocupa su celda. */
+  private artFormation(art: readonly string[], portrait: boolean, pixelRatio: number): Formation {
+    const { width, height, count } = this;
+    const box = portrait ? SYMBOL_TALL : SYMBOL_WIDE;
+    const rows = art.length;
+    const cols = Math.max(0, ...art.map((line) => line.length));
+    if (rows < 1 || cols < 1) return emptyFormation();
+
+    // Crece hasta llenar su hueco, pero nunca encoge por debajo de la letra normal.
+    const scale = clamp(
+      Math.min(
+        (width * box.width) / (cols * this.atlas.cellWidth),
+        (height * box.height) / (rows * this.atlas.cellHeight),
+      ),
+      1,
+      SYMBOL_MAX_SCALE,
+    );
+    const cellWidth = this.atlas.cellWidth * scale;
+    const cellHeight = this.atlas.cellHeight * scale;
+    // En píxeles enteros de pantalla: a medio píxel, dos caracteres vecinos pintan
+    // la misma columna y aparece una raya entre ellos.
+    const snap = (value: number) => Math.round(value * pixelRatio) / pixelRatio;
+    const left = snap(width * box.x - (cols * cellWidth) / 2);
+    const top = snap(height * box.y - (rows * cellHeight) / 2);
+
+    const x = new Float32Array(count);
+    const y = new Float32Array(count);
+    const glyph = new Uint8Array(count);
+    let size = 0;
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < art[row].length && size < count; col++) {
+        const index = GLYPHS.indexOf(art[row][col]);
+        if (index < 0) continue;
+        x[size] = left + (col + 0.5) * cellWidth;
+        y[size] = top + (row + 0.5) * cellHeight;
+        glyph[size] = index;
+        size++;
+      }
+    }
+
+    return { x, y, size, glyph, scale };
   }
 
   private lineFormation(topRatio: number) {
