@@ -54,6 +54,40 @@ a {
   padding: var(--space-gutter);
 }
 
+/* Una escena ocupa la pantalla: da recorrido al lienzo y sitio a su símbolo. */
+.scene {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100svh;
+}
+
+/* El texto no llena la columna: a su derecha se forma el símbolo. */
+.scene__body {
+  max-width: 40ch;
+}
+
+.scene__note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-dim);
+}
+
+.scene__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em 1.6em;
+  margin: 1.4em 0 0;
+}
+
+/* La misma frontera que usa el lienzo: en vertical el símbolo va arriba y el texto abajo. */
+@media (max-aspect-ratio: 6/7) {
+  .scene[data-symbol] {
+    justify-content: flex-end;
+    padding-bottom: 12svh;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--color-signal);
   outline-offset: 3px;
