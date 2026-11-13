@@ -213,6 +213,7 @@ export async function mountHero() {
     scene.dim(reducedMotion.matches ? 1 : lerp(1, HORIZON_ALPHA, veil));
     if (reducedMotion.matches) return scene.render(elapsed, true);
     scene.disturb(pointerX, pointerY, force, sway, waves, waveCount);
+    scene.drift(window.scrollY);
     // Desde el logo mandan las figuras, con el ruido de fondo alrededor.
     if (position >= 1) scene.renderFormation(position - 1, elapsed);
     else scene.render(elapsed, false, position);

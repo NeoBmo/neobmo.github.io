@@ -20,10 +20,12 @@ import Waypoints from "../components/Waypoints.astro";
 
 <script>
   import { mountRails } from "../scripts/rails";
+  import { mountScenes } from "../scripts/scenes";
   import { mountSheets } from "../scripts/sheets";
   import { mountWaypoints } from "../scripts/waypoints";
 
   mountRails();
+  mountScenes();
   mountSheets();
   mountWaypoints();
 </script>
