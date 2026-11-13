@@ -4,35 +4,69 @@ import { href } from "../lib/url";
 ---
 
 <Base title="Página no encontrada — NeoBmo" description="Esta página no existe." noindex>
-  <main class="reading lost">
-    <p class="lost__line" aria-hidden="true">&gt; 404</p>
-    <h1>Esta página no existe</h1>
+  <main class="lost">
+    <canvas class="lost__canvas" aria-hidden="true" data-lost></canvas>
+    <noscript>
+      <style>
+        .lost__canvas {
+          display: none;
+        }
+      </style>
+    </noscript>
+    <p class="lost__code" aria-hidden="true">404</p>
+    <h1>Ups, no encontramos lo que buscabas</h1>
     <p>Puede que el enlace esté mal escrito o que la página haya cambiado de sitio.</p>
     <a href={href("")}>Volver al inicio</a>
   </main>
 </Base>
 
+<script>
+  import { mountLost } from "../scripts/lost";
+
+  const canvas = document.querySelector<HTMLCanvasElement>("[data-lost]");
+  if (canvas) mountLost(canvas);
+</script>
+
 <style>
+  /* Una sola columna centrada: arriba, los caracteres que se ordenan en «404». */
   .lost {
     display: flex;
     flex-direction: column;
+    align-items: center;
     justify-content: center;
     min-height: 100svh;
+    padding: var(--space-gutter);
+    text-align: center;
   }
 
-  .lost__line {
+  .lost__canvas {
+    width: 100%;
+    max-width: 60rem;
+    height: 42svh;
+  }
+
+  /* Sin el script, el número se lee como texto; con el lienzo listo, sobra. */
+  .lost__code {
     margin: 0;
-    font-size: var(--text-sm);
-    color: var(--color-dim);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .lost__canvas[data-ready] ~ .lost__code {
+    display: none;
   }
 
   h1 {
-    margin: 0.3em 0 0.4em;
+    max-width: 24ch;
+    margin: 1em 0 0.4em;
     font-size: var(--text-lg);
     line-height: 1.2;
   }
 
-  a {
-    align-self: flex-start;
+  p {
+    max-width: 44ch;
+    margin: 0 0 1.4em;
+    color: var(--color-dim);
   }
 </style>
