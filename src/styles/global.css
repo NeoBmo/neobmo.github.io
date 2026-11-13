@@ -102,8 +102,9 @@ html[data-stage="greeting"] {
 }
 
 /* Entrada y salida de una escena: su texto entra por partes al llegar y se retira
-   al irse. La primera tiene su propia entrada, la de la intro. */
-@media (prefers-reduced-motion: no-preference) {
+   al irse. La primera tiene su propia entrada, la de la intro. Solo en pantalla:
+   impreso, todo el texto está. */
+@media screen and (prefers-reduced-motion: no-preference) {
   [data-reveal] .scene :is(.scene__body, .panel) > * {
     transition:
       opacity 0.5s var(--ease-out),

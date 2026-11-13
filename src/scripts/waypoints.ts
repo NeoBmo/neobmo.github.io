@@ -21,6 +21,8 @@ export function mountWaypoints() {
   if (!nav) return;
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  // En una pantalla táctil el «puntero encima» se queda pegado tras un toque.
+  const hovers = matchMedia("(hover: hover)");
   const links = [...nav.querySelectorAll<HTMLAnchorElement>("a")];
   const glyphs = links.map((link) => link.querySelector<HTMLElement>("[data-glyph]"));
   const targets = links.map((link) => document.getElementById(link.hash.slice(1)));
@@ -53,7 +55,7 @@ export function mountWaypoints() {
 
   const rest = () => {
     // Con el puntero encima o el foco dentro, sigue a la vista.
-    if (nav.matches(":hover, :focus-within")) return wake();
+    if (nav.matches(":focus-within") || (hovers.matches && nav.matches(":hover"))) return wake();
     nav.removeAttribute("data-awake");
     clearInterval(flicker);
     flicker = 0;
@@ -81,6 +83,9 @@ export function mountWaypoints() {
       if (!target || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       // Sin ancla en la dirección: al recargar, la página vuelve a empezar arriba.
       event.preventDefault();
+      // Con ratón o dedo el enlace no se queda con el foco: si no, el índice no se
+      // retiraría. Con teclado sí lo conserva.
+      if (event.detail > 0) link.blur();
       scrollTo({
         top: Math.round(target.getBoundingClientRect().top + scrollY),
         behavior: reducedMotion.matches ? "instant" : "smooth",

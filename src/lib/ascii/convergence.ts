@@ -97,6 +97,13 @@ const DEPTH_NEAR = 0.7;
 /** Tamaño y brillo del más lejano y del más cercano, respecto al normal. */
 const DEPTH_SCALE = [0.8, 1.25] as const;
 const DEPTH_ALPHA = [0.6, 1.3] as const;
+/**
+ * Junto al borde por el que un carácter da la vuelta, el ruido se apaga: así el
+ * salto no se ve, tampoco si lo pilla de camino a una figura. En alturas de celda.
+ */
+const SEAM_BAND = 4;
+/** Desde este punto del viaje a una figura, el carácter ya se ve aunque venga del borde. */
+const SEAM_CLEAR = 0.8;
 /** Distancia, en alturas de celda, a la que el ruido se apaga junto a una zona de calma. */
 const CALM_MARGIN = 3;
 /** Valores por zona en la lista que recibe `calm`: izquierda, arriba, derecha y abajo. */
@@ -186,6 +193,8 @@ export class Convergence {
   // de ruido calculado.
   private travel = 0;
   private near = 0;
+  // Lo lejos (0–1) que está ese mismo carácter del borde por el que da la vuelta.
+  private seam = 1;
   // Las dos figuras del fotograma también apartan el ruido, cada una con su peso.
   private nearBox: Formation["box"] = NO_BOX;
   private nearWeight = 0;
@@ -343,7 +352,9 @@ export class Convergence {
         x = lerp(this.atX, shape.x[j], formed);
         y = lerp(this.atY, shape.y[j], formed);
         scale = lerp(lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near), shape.scale, formed);
-        alpha = lerp(faint * this.depthAlpha() * this.clearAt(x, y), 1, formed);
+        alpha =
+          lerp(faint * this.depthAlpha() * this.clearAt(x, y), 1, formed) *
+          lerp(this.seam, 1, smoothstep(SEAM_CLEAR, 1, formed));
         if (formed > 0.9) glyph = shape.glyph[j];
         else if (formed < 0.1) glyph = this.ambientGlyph(n, time);
         else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
@@ -351,7 +362,7 @@ export class Convergence {
         this.ambientAt(n, time);
         x = this.atX;
         y = this.atY;
-        alpha = faint * this.depthAlpha() * this.clearAt(x, y);
+        alpha = faint * this.depthAlpha() * this.clearAt(x, y) * this.seam;
         if (alpha < 0.01) continue;
         glyph = this.ambientGlyph(n, time);
         scale = lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near);
@@ -472,7 +483,9 @@ export class Convergence {
         x = lerp(x, this.atX, scatter);
         y = lerp(y, this.atY, scatter);
         scale = lerp(1, lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near), scatter);
-        alpha = lerp(1, faint * this.depthAlpha() * this.clearAt(x, y), scatter);
+        alpha =
+          lerp(1, faint * this.depthAlpha() * this.clearAt(x, y), scatter) *
+          lerp(this.seam, 1, smoothstep(SEAM_CLEAR, 1, 1 - scatter));
         if (scatter > 0.9) glyph = this.ambientGlyph(i, time);
         else if (scatter > 0.1) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
       }
@@ -561,7 +574,9 @@ export class Convergence {
     const margin = reach + this.atlas.cellHeight;
     const span = this.height + margin * 2;
     const risen = this.ambientY[n] - this.travel * lerp(DEPTH_FAR, DEPTH_NEAR, this.near);
-    const wrapped = (((risen + margin) % span) + span) % span - margin;
+    const along = (((risen + margin) % span) + span) % span;
+    const wrapped = along - margin;
+    this.seam = smoothstep(0, margin + this.atlas.cellHeight * SEAM_BAND, Math.min(along, span - along));
     // Dos ritmos distintos por eje: el vaivén no se repite a la vista.
     this.atX = this.ambientX[n] + Math.sin(time * (0.2 + seed * 0.3) + seed * 40) * reach;
     this.atY = wrapped + Math.cos(time * (0.15 + seed * 0.25) + seed * 71) * reach;

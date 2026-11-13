@@ -141,8 +141,10 @@ export async function mountLost(canvas: HTMLCanvasElement) {
     laidOut = key;
     cancelAnimationFrame(frame);
     frame = 0;
-    if (!layout()) return;
-    canvas.toggleAttribute("data-ready", true);
+    // Si no cabe, vuelve el número escrito como texto.
+    const fits = layout();
+    canvas.toggleAttribute("data-ready", fits);
+    if (!fits) return;
     // Sin movimiento, o si ya se había formado, se dibuja ordenado de una vez.
     if (reducedMotion.matches || started) draw(Infinity);
     else frame = requestAnimationFrame(tick);
