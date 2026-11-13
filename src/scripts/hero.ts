@@ -10,25 +10,25 @@ import {
   DISSOLVE_DURATION,
   DISSOLVE_START,
   FINALE_HOLD,
+  GREETING_DELAY,
+  GREETING_HOLD,
   HORIZON_ALPHA,
   LOGO_AT,
-  LOGO_SCROLL,
   MAX_RATE,
   MAX_WAVES,
   POINTER_HOLD_MS,
   POINTER_RESPONSE,
   RATE_RESPONSE,
+  RELEASE_DURATION,
   SCENE_HOLD,
   STAGE_RESPONSE,
   SWAY_FULL,
   SWAY_RESPONSE,
   WAVE_DURATION_MS,
   WAVE_REACH,
-  afterLogo,
-  stageAt,
 } from "../lib/choreography";
+import { typedAt, typingTime } from "../lib/greeting";
 import { SYMBOLS, type SymbolName } from "../lib/symbols";
-import { mountTerminal } from "./terminal";
 
 const FONT_FAMILY = '"JetBrains Mono", monospace';
 /** Los teléfonos reciben menos píxeles: su pantalla ya es densa. */
@@ -53,7 +53,7 @@ const SLOW_FRAME_MS = 1000 / 50;
 const SLOW_RATIO = 1.3;
 /** Segundos de intro: hasta aquí se toma la referencia y desde aquí se mide. */
 const BASELINE_UNTIL = 0.8;
-const MEASURE_FROM = 2;
+const MEASURE_FROM = 3;
 /** Fotogramas por ventana de medida, y los mínimos para fiarse de la referencia. */
 const QUALITY_WINDOW = 30;
 const BASELINE_FRAMES = 5;
@@ -80,6 +80,11 @@ function storeQuality(level: number) {
     // Sin almacenamiento (modo privado), cada visita vuelve a medir.
   }
 }
+
+/** Espacio, en píxeles, entre el logo y el saludo que se escribe debajo. */
+const GREETING_GAP = 24;
+/** Teclas y gestos que, durante la intro, la aceleran. */
+const HURRY_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
 /** Zonas de texto que el ruido de fondo respeta a la vez: las escenas en pantalla. */
 const MAX_CALM = 3;
@@ -109,7 +114,7 @@ async function paintingFor(portrait: boolean): Promise<Painting> {
   return { field: await fields.get(url)!, focus };
 }
 
-export async function mountHero(section: HTMLElement) {
+export async function mountHero() {
   // El lienzo vive fuera del hero: es el fondo fijo de toda la página.
   const backdrop = document.querySelector<HTMLCanvasElement>("[data-backdrop]");
   if (!backdrop) return;
@@ -138,9 +143,20 @@ export async function mountHero(section: HTMLElement) {
   let lastFrame = 0;
   let frame = 0;
   let rate = 1;
-  let progress = 0;
-  let horizon = 0;
-  // Las escenas que siguen al horizonte: cada una anuncia su símbolo en la página.
+  // La intro corre sola: pintura, logo, saludo escrito y logo que se deshace. En
+  // qué tramo va lo sabe la página por `data-stage`, y el CSS decide qué se ve.
+  const root = document.documentElement;
+  root.dataset.hero = "";
+  const opening = document.querySelector<HTMLElement>("[data-opening]");
+  const greetingLines = [...document.querySelectorAll<HTMLElement>("[data-greeting-line]")];
+  const greeting = greetingLines.map((line) => line.dataset.greetingLine ?? "");
+  const greetingAt = LOGO_AT + GREETING_DELAY;
+  const releaseAt = greetingAt + typingTime(greeting) + GREETING_HOLD;
+  const introEnd = releaseAt + RELEASE_DURATION;
+  let stage = root.dataset.stage ?? "";
+  // Un gesto durante la intro no desplaza la página: la acelera.
+  let hurry = false;
+  // Las escenas con símbolo: cada una lo anuncia en la página.
   const scenes = [...document.querySelectorAll<HTMLElement>("[data-symbol]")];
   const symbols = scenes.map((scene) => SYMBOLS[scene.dataset.symbol as SymbolName] ?? []);
   let scenery = 0;
@@ -155,12 +171,11 @@ export async function mountHero(section: HTMLElement) {
   const ending = document.querySelector<HTMLElement>("[data-finale]");
   const leaving = ending?.previousElementSibling;
   let finale = 0;
-  // Un solo número recorre toda la obra: 0–1 pintura → logo, 1–2 logo → línea,
-  // 2–3 la línea sube a horizonte detrás del contenido.
+  // Un solo número recorre toda la obra: 0–1 pintura → logo, 1–2 el logo se
+  // deshace en ruido, y de ahí en adelante un símbolo por escena.
   let position = 0;
   let drawnPosition = -1;
-  // El velo atenúa el lienzo cuando hay texto encima. Sigue al horizonte aparte de
-  // `position` porque también debe actuar si alguien baja durante la intro.
+  // El velo atenúa el lienzo cuando hay texto encima: desde que el logo se deshace.
   let veil = 0;
   let drawnVeil = -1;
   // El visitante altera el lienzo: `force` crece mientras mueve el puntero o toca,
@@ -178,9 +193,6 @@ export async function mountHero(section: HTMLElement) {
   const ripples: { x: number; y: number; start: number }[] = [];
   const waves = new Float32Array(MAX_WAVES * WAVE_STRIDE);
   let waveCount = 0;
-  // La intro mantiene el logo hasta que el visitante baja; desde ahí manda el scroll,
-  // así que al volver arriba la pintura se queda quieta y no se disuelve sola.
-  let introHolds = true;
   // Hasta que el lienzo tiene tamaño no hay nada que dibujar.
   let ready = false;
   let laidOut = "";
@@ -237,12 +249,12 @@ export async function mountHero(section: HTMLElement) {
 
     scene.layout(width, height, pixelRatio, painting, logo, glyphScale, symbols, isPortrait);
     // Con otro tamaño de pantalla el texto cambia de sitio: se vuelve a medir.
+    place();
     calm();
     draw();
 
     if (ready) return;
     ready = true;
-    section.dataset.ready = "";
     canvas.dataset.ready = "";
     play();
   };
@@ -253,21 +265,34 @@ export async function mountHero(section: HTMLElement) {
     const delta = Math.min(interval / 1000, 0.1);
     lastFrame = now;
 
-    const introRunning = elapsed < LOGO_AT;
-    const targetRate = introRunning && progress > 0 ? MAX_RATE : 1;
+    const introRunning = elapsed < introEnd;
+    const targetRate = introRunning && hurry ? MAX_RATE : 1;
     rate += (targetRate - rate) * Math.min(delta * RATE_RESPONSE, 1);
     elapsed += delta * rate;
 
-    if (!introRunning && progress >= LOGO_SCROLL) introHolds = false;
-    const dissolve = introHolds
-      ? clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION)
-      : clamp(progress / LOGO_SCROLL);
+    // El saludo se escribe solo bajo el logo; al terminar, la página se abre.
+    if (stage !== "open") {
+      const typed = typedAt(greeting, elapsed - greetingAt);
+      let writing = 0;
+      greetingLines.forEach((line, index) => {
+        if (line.textContent !== typed[index]) line.textContent = typed[index];
+        if (typed[index]) writing = index;
+      });
+      // El cursor acompaña a la línea que se está escribiendo.
+      greetingLines.forEach((line, index) =>
+        line.parentElement?.toggleAttribute("data-typing", index === writing),
+      );
+      setStage(elapsed < greetingAt ? "intro" : elapsed < releaseAt ? "greeting" : "open");
+    }
+
+    const dissolve = clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION);
+    const release = clamp((elapsed - releaseAt) / RELEASE_DURATION);
     // El final multiplica por lo que falta todo lo recorrido después del logo: lo
     // deshace pasando por cada figura hasta dejar el logo, y al subir lo rehace en
     // el mismo orden. La pintura no vuelve: es solo del principio.
-    const journey = introRunning ? 0 : stageAt(afterLogo(progress)) + horizon + scenery;
+    const journey = release + (introRunning ? 0 : scenery);
     const target = dissolve + journey * (1 - finale);
-    const veilTarget = horizon * (1 - finale);
+    const veilTarget = release * (1 - finale);
 
     // La intro va exacta al reloj; después los caracteres persiguen al scroll,
     // así que incluso un salto brusco, en cualquier sentido, viaja suave.
@@ -314,13 +339,13 @@ export async function mountHero(section: HTMLElement) {
         // despacio. Tras un rato sin gestos, el bucle se detiene hasta el próximo.
         // El primer fotograma tras reanudar no mide tiempo: se espera al siguiente
         // para que el gesto que lo despertó llegue a notarse.
-        const settled = position === target && veil === veilTarget && delta > 0 && !stirring;
+        const settled =
+          !introRunning && position === target && veil === veilTarget && delta > 0 && !stirring;
         if (settled && now - lastInput > AMBIENT_REST_MS) return pause();
         if (now - lastDraw < AMBIENT_FRAME_MS) return;
       }
     }
 
-    section.toggleAttribute("data-settled", position >= 1);
     lastDraw = now;
     draw();
     // Solo se mide durante la intro, que es cuando viajan todos los caracteres, y
@@ -411,9 +436,30 @@ export async function mountHero(section: HTMLElement) {
     return scenes.length;
   };
 
-  mountTerminal(section, (heroProgress, horizonProgress) => {
-    progress = heroProgress;
-    horizon = horizonProgress;
+  /** Cambia de tramo de la intro. Al abrirse la página, el texto ya ocupa su sitio. */
+  function setStage(next: string) {
+    if (next === stage) return;
+    stage = next;
+    if (next) root.dataset.stage = next;
+    else delete root.dataset.stage;
+    if (next !== "open") return;
+    calm();
+    // El saludo sube a su sitio con una transición: al acabar, se vuelve a medir.
+    setTimeout(calm, 1100);
+  }
+
+  /** Durante la intro, el saludo se escribe justo debajo del logo. */
+  function place() {
+    if (!opening) return;
+    // `offsetTop` no cuenta el desplazamiento: es el sitio que tendrá al abrirse.
+    const shift = scene.logoBottom + GREETING_GAP - (opening.offsetTop - window.scrollY);
+    opening.style.setProperty("--intro-shift", `${Math.max(0, Math.round(shift))}px`);
+  }
+
+  // Lo que depende del scroll se lee una vez por fotograma.
+  let following = 0;
+  const follow = () => {
+    following = 0;
     scenery = sceneAt();
     const screen = window.innerHeight;
     const entered = ending && screen > 0 ? 1 - ending.getBoundingClientRect().top / screen : 0;
@@ -426,9 +472,23 @@ export async function mountHero(section: HTMLElement) {
     }
     calm();
     wake();
-  });
+  };
+  const onScroll = () => {
+    following ||= requestAnimationFrame(follow);
+  };
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", onScroll);
+  follow();
 
-  section.toggleAttribute("data-settled", reducedMotion.matches);
+  for (const type of HURRY_EVENTS) {
+    addEventListener(
+      type,
+      () => {
+        if (elapsed < introEnd) hurry = true;
+      },
+      { passive: true },
+    );
+  }
 
   // Un solo camino para ratón, lápiz y dedo. Reacciona al movimiento, no a la
   // presencia: un puntero quieto no deja un hueco y el bucle puede detenerse.
@@ -473,7 +533,11 @@ export async function mountHero(section: HTMLElement) {
     sway = 0;
     ripples.length = 0;
     waveCount = 0;
-    section.toggleAttribute("data-settled", reducedMotion.matches);
+    // Sin movimiento no hay intro: el saludo completo y la página abierta.
+    if (reducedMotion.matches) {
+      greetingLines.forEach((line, index) => (line.textContent = greeting[index]));
+      setStage("");
+    }
     if (ready) draw();
     play();
   });

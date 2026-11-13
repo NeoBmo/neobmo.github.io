@@ -8,12 +8,12 @@ Sitio personal de Luis Rodríguez (NeoBmo), versión 7: un portafolio que se rec
 
 Una sola página coreografiada. Un lienzo de caracteres fijo detrás de todo cambia de figura según avanza el visitante:
 
-1. *La noche estrellada*, dibujada con caracteres.
-2. La pintura se disuelve en el logo `\|°`.
-3. El logo baja a una línea y la terminal saluda.
-4. Cada escena (sobre mí, proyectos, método, contacto) forma su propio símbolo.
+1. El caos forma *La noche estrellada*, dibujada con caracteres.
+2. La pintura se disuelve en el logo `\|°` y el saludo se escribe solo.
+3. El logo se deshace en un ruido de caracteres que acompaña toda la página.
+4. Cada escena (proyectos, método, contacto) forma su propio símbolo con ese ruido.
 
-El visitante no arrastra la página: un gesto pequeño lo lleva a la parada siguiente. El lienzo reacciona al puntero, al tacto, a la velocidad del scroll y a los clics.
+La intro corre sola. Después, el visitante no arrastra la página: un gesto pequeño lo lleva a la parada siguiente. El lienzo reacciona al puntero, al tacto, a la velocidad del scroll y a los clics.
 
 ## Principios
 
@@ -54,8 +54,8 @@ src/
   components/   Hero, Backdrop (el lienzo), Sections, Projects, Sheet (ventana de lectura)
   content/      el texto del sitio, en Markdown
   lib/ascii/    motor del lienzo: partículas, formaciones y dibujo en WebGL
-  lib/          partitura del scroll, símbolos ASCII y texto de la terminal
-  scripts/      lo que corre en el navegador: hero, terminal, raíles, ventanas
+  lib/          partitura, símbolos ASCII y el saludo que se escribe solo
+  scripts/      lo que corre en el navegador: hero, raíles, índice, ventanas
   pages/        portada, páginas de detalle, 404, robots.txt y sitemap.xml
   styles/       tokens y estilos globales
 scripts/        preparación de recursos (pintura e imagen para compartir)
@@ -63,10 +63,10 @@ scripts/        preparación de recursos (pintura e imagen para compartir)
 
 ## Cómo funciona
 
-- **Una sola partitura.** `src/scripts/hero.ts` convierte el scroll en un número: 0 es la pintura, 1 el logo, 2 la línea, 3 el horizonte y de ahí en adelante un símbolo por escena. El lienzo persigue ese número con suavidad, así que no hay relojes que sincronizar.
+- **Una sola partitura.** `src/scripts/hero.ts` lleva un número: 0 es la pintura, 1 el logo, 2 solo ruido y de ahí en adelante un símbolo por escena. La intro lo mueve con el reloj y después lo mueve el scroll; el lienzo lo persigue con suavidad.
 - **El lienzo.** `src/lib/ascii/convergence.ts` mueve los caracteres entre formaciones y `glyph-renderer.ts` los dibuja en una sola llamada.
 - **Los raíles.** `src/scripts/rails.ts` lleva la rueda y el teclado de parada en parada; el dedo lo encaja el navegador con `scroll-snap`.
-- **La terminal.** Fija abajo a la izquierda, escribe una línea por escena en función del scroll: subir la desescribe.
+- **El saludo.** Se escribe solo bajo el logo y, al abrirse la página, sube a su sitio como título de «Sobre mí».
 - **Ventanas de lectura.** «Leer más» abre el texto completo en un `<dialog>` sobre la escena. El enlace sigue apuntando a la página de detalle, que es lo que se abre sin JavaScript.
 
 ## Contenido

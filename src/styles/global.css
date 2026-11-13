@@ -68,6 +68,13 @@ a {
   }
 }
 
+/* Durante la intro la página no se desplaza: la obra se presenta sola. */
+html[data-stage="intro"],
+html[data-stage="greeting"] {
+  overflow: hidden;
+  touch-action: none;
+}
+
 /* Una escena ocupa la pantalla: da recorrido al lienzo y sitio a su símbolo. */
 .scene {
   display: flex;

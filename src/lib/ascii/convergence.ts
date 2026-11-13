@@ -9,15 +9,15 @@ import { clamp, createRandom, easeInOutCubic, easeOutCubic, lerp, smoothstep } f
  * travels, lands, and only then do colour and life arrive.
  */
 const TIMING = {
-  revealStart: 0.2,
-  reveal: 1.6,
-  departure: 1.4,
+  revealStart: 0.3,
+  reveal: 2.8,
+  departure: 2.4,
   stagger: 1.4,
   travel: 1.7,
-  colorStart: 3.2,
+  colorStart: 4.2,
   colorDuration: 1.6,
-  lifeStart: 4.4,
-  lifeDuration: 2.5,
+  lifeStart: 5.4,
+  lifeDuration: 2.2,
 };
 
 /** Points per journey: a random origin, then a stroke that ends at home. */
@@ -26,9 +26,13 @@ const POINTS = STROKE_STEPS + 2;
 /** Share of the journey spent flying from the noise into the stroke. */
 const SWEEP = 0.3;
 
-/** Tamaño máximo y altura del logo, como proporción de la pantalla. */
-const LOGO_WIDTH = 0.85;
-const LOGO_HEIGHT = 0.5;
+/**
+ * Tamaño máximo del cuadro del logo y su altura, como proporción de la pantalla.
+ * El dibujo ocupa unos tres cuartos del ancho del cuadro y la mitad de su alto,
+ * así que el cuadro puede pasar del ancho de un teléfono sin que el logo se corte.
+ */
+const LOGO_WIDTH = 1.1;
+const LOGO_HEIGHT = 0.8;
 const LOGO_TOP = 0.42;
 /** Parte de la disolución que dura el viaje de cada carácter hasta el logo. */
 const LOGO_TRAVEL = 0.6;
@@ -40,11 +44,6 @@ const LOGO_ARC = 0.25;
  */
 const LOGO_SLASH_END = 0.42;
 const LOGO_BAR_END = 0.6;
-const LINE_GLYPH = glyphFor(0.5, 0, 1);
-
-/** Altura de la línea de salida del hero y del horizonte que queda tras él. */
-const EXIT_LINE_TOP = 0.8;
-const HORIZON_TOP = 0.08;
 
 /**
  * Dónde se forma el símbolo de un proyecto y cuánto puede ocupar, como parte de la
@@ -503,6 +502,12 @@ export class Convergence {
     return strength;
   }
 
+  /** Borde inferior del logo, en píxeles del lienzo: de ahí hacia abajo queda sitio libre. */
+  get logoBottom() {
+    const bottom = this.formations[0]?.box[3] ?? -Infinity;
+    return Number.isFinite(bottom) ? bottom + this.atlas.cellHeight / 2 : this.height / 2;
+  }
+
   /** Fija la opacidad del próximo dibujo, para que el texto de encima se lea. */
   dim(alpha: number) {
     this.opacity = alpha;
@@ -627,8 +632,9 @@ export class Convergence {
         this.dirX[n] = Math.cos(angle);
         this.dirY[n] = Math.sin(angle);
         this.phase[n] = (hx * this.dirX[n] + hy * this.dirY[n]) / wavelength;
-        // sqrt skews arrivals late, so the noise grows from a few glyphs to a crowd.
-        this.appear[n] = TIMING.revealStart + Math.sqrt(random()) * TIMING.reveal;
+        // La raíz cúbica retrasa las llegadas: el caos empieza con unos pocos
+        // caracteres y acaba en multitud.
+        this.appear[n] = TIMING.revealStart + Math.cbrt(random()) * TIMING.reveal;
         // Light leaves first: stars, then sky, then the village and cypress.
         this.departure[n] = Math.max(
           this.appear[n] + 0.2,
@@ -675,7 +681,7 @@ export class Convergence {
     }
   }
 
-  /** Prepara las figuras en orden: logo, línea de salida y horizonte. */
+  /** Prepara las figuras en orden: el logo, ninguna (solo ruido) y un símbolo por escena. */
   private buildFormations(
     logo: HTMLImageElement,
     symbols: readonly (readonly string[])[],
@@ -718,8 +724,7 @@ export class Convergence {
 
     this.formations = [
       this.logoFormation(logo),
-      this.lineFormation(EXIT_LINE_TOP),
-      this.lineFormation(HORIZON_TOP),
+      emptyFormation(),
       ...symbols.map((art) => this.artFormation(art, portrait, pixelRatio)),
     ];
 
@@ -789,16 +794,6 @@ export class Convergence {
     }
 
     return { x, y, size, glyph, scale, box: boxOf(x, y, size) };
-  }
-
-  private lineFormation(topRatio: number) {
-    const { cols, height } = this;
-    const { cellWidth } = this.atlas;
-    const size = Math.min(cols, this.count);
-    const x = new Float32Array(size);
-    const y = new Float32Array(size).fill(height * topRatio);
-    for (let j = 0; j < size; j++) x[j] = this.gridX + (j + 0.5) * cellWidth;
-    return { x, y, size, glyph: new Uint8Array(size).fill(LINE_GLYPH), scale: 1, box: boxOf(x, y, size) };
   }
 
   /** Convierte en celdas lo que `draw` pinta en una capa del tamaño de la figura. */

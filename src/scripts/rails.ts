@@ -73,8 +73,13 @@ export function mountRails() {
 
   const tall = (stop: Stop) => stop.bottom !== undefined && stop.bottom - stop.top > innerHeight + SLACK;
 
-  /** Con una ventana de lectura abierta, la rueda y las teclas son suyas. */
-  const reading = () => document.querySelector("dialog[open]") !== null;
+  /**
+   * Con una ventana de lectura abierta, la rueda y las teclas son suyas; y durante
+   * la intro la página no se desplaza.
+   */
+  const reading = () =>
+    document.querySelector("dialog[open]") !== null ||
+    ["intro", "greeting"].includes(document.documentElement.dataset.stage ?? "");
 
   let lockedUntil = 0;
   let lastWheel = 0;
