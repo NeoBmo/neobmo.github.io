@@ -146,7 +146,6 @@ export async function mountHero() {
   // La intro corre sola: pintura, logo, saludo escrito y logo que se deshace. En
   // qué tramo va lo sabe la página por `data-stage`, y el CSS decide qué se ve.
   const root = document.documentElement;
-  root.dataset.hero = "";
   const opening = document.querySelector<HTMLElement>("[data-opening]");
   const greetingLines = [...document.querySelectorAll<HTMLElement>("[data-greeting-line]")];
   const greeting = greetingLines.map((line) => line.dataset.greetingLine ?? "");
@@ -255,6 +254,14 @@ export async function mountHero() {
 
     if (ready) return;
     ready = true;
+    // Solo ahora la intro puede arrancar: hasta aquí, el seguro del script en línea
+    // sigue vigente y abre la página si la pintura no llega o algo falla.
+    root.dataset.hero = "";
+    // Si el seguro ya la abrió, la intro no vuelve a cerrarla: se da por vista.
+    if (!reducedMotion.matches && !root.dataset.stage) {
+      stage = "";
+      elapsed = introEnd;
+    }
     canvas.dataset.ready = "";
     play();
   };
