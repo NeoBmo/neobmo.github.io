@@ -4,7 +4,6 @@ kicker: Método
 summary: Trabajo solo, con un agente de IA como compañero. Yo decido y respondo del resultado; él ejecuta, y nada se da por bueno sin comprobarlo.
 steps: [Entender, Planificar, Actuar, Evaluar, Ajustar, Cerrar]
 repo: https://github.com/NeoBmo/withIA
-command: así trabajo con IA
 symbol: loop
 afterProjects: true
 order: 2

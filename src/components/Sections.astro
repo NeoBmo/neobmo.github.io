@@ -33,13 +33,34 @@ const year = new Date().getFullYear();
         class:list={["scene", data.finale ? "finale" : "reading"]}
         id={id}
         data-symbol={data.symbol}
-        data-command={data.finale ? undefined : (data.command ?? data.title)}
         data-finale={data.finale ? "" : undefined}
         aria-labelledby={`${id}-title`}
       >
-        <div class={data.finale ? "panel" : data.symbol ? "scene__body" : "plain"}>
+        <div
+          class={
+            data.finale
+              ? "panel"
+              : data.symbol
+                ? "scene__body"
+                : data.greeting.length > 0
+                  ? "opening"
+                  : "plain"
+          }
+          data-opening={data.greeting.length > 0 ? "" : undefined}
+        >
+          {data.greeting.length > 0 && (
+            <p class="greeting" aria-hidden="true">
+              {data.greeting.map((line) => (
+                <span class="greeting__line">
+                  &gt; <span data-greeting-line={line}>{line}</span>
+                </span>
+              ))}
+            </p>
+          )}
           {data.kicker && <p class="scene__note">{data.kicker}</p>}
-          <h2 id={`${id}-title`}>{data.title}</h2>
+          <h2 id={`${id}-title`} class:list={{ "visually-hidden": data.greeting.length > 0 }}>
+            {data.title}
+          </h2>
           <p>{data.summary}</p>
           {data.steps.length > 0 && (
             <ol class="steps" role="list">
@@ -91,6 +112,63 @@ const year = new Date().getFullYear();
   /* Sin símbolo, el contenedor no cuenta: el texto se coloca como antes de las escenas. */
   .plain {
     display: contents;
+  }
+
+  /* El saludo se escribe solo al acabar la intro y queda como título de la sección. */
+  .greeting {
+    margin: 0 0 0.6em;
+    font-size: var(--text-lg);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .greeting__line {
+    display: block;
+    white-space: pre;
+  }
+
+  /* El cursor va en la línea que se escribe; las siguientes esperan su turno. */
+  .greeting__line[data-typing]::after {
+    content: "█";
+  }
+
+  .greeting__line:not([data-typing]):has([data-greeting-line]:empty) {
+    visibility: hidden;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .greeting__line[data-typing]::after {
+      animation: blink 1s steps(1) infinite;
+    }
+
+    /* Al abrirse la página, el saludo sube a su sitio y el resto aparece. */
+    .opening {
+      transition: transform 1s var(--ease-out);
+    }
+
+    .opening > * {
+      transition: opacity 0.8s var(--ease-out) 0.3s;
+    }
+
+    /* Durante la intro el bloque espera debajo del logo, y solo se ve el saludo. */
+    :global(html[data-stage="intro"]) .opening,
+    :global(html[data-stage="greeting"]) .opening {
+      transform: translateY(var(--intro-shift, 0px));
+      transition: none;
+    }
+
+    :global(html[data-stage="intro"]) .opening > *,
+    :global(html[data-stage="greeting"]) .opening > :not(.greeting) {
+      visibility: hidden;
+      opacity: 0;
+      transition: none;
+    }
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
   }
 
   /* Solo en las escenas con símbolo o panel: las demás conservan el título de siempre. */

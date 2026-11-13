@@ -6,7 +6,6 @@ summary: Un cuaderno abierto con lo que aprendo y lo que no dejo de pensar, escr
 stack: [Astro, TypeScript, Markdown]
 repo: https://github.com/NeoBmo/One.Bemore
 site: https://blogrdeveloper.netlify.app
-command: mi sitio de curiosidades
 symbol: notebook
 order: 1
 ---

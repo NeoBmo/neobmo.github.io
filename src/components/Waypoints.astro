@@ -9,9 +9,8 @@ const link = ({ id, data }: { id: string; data: { title: string } }) => ({
   label: data.title,
 });
 
-// El mismo orden que la portada: inicio, secciones, proyectos y el resto.
+// El mismo orden que la portada: secciones, proyectos y el resto.
 const stops = [
-  { target: "inicio", label: "Inicio" },
   ...sections.filter(({ data }) => !data.afterProjects).map(link),
   ...projects.map(({ id, data }) => ({ target: `proyecto-${id}`, label: data.title })),
   ...sections.filter(({ data }) => data.afterProjects).map(link),
@@ -47,8 +46,8 @@ const stops = [
     transition: opacity 0.4s var(--ease-out);
   }
 
-  /* Aparece con la terminal, cuando el logo ya está formado: la pintura va sola. */
-  :global(body:has([data-hero][data-settled])) .waypoints {
+  /* Aparece cuando la intro termina y la página se abre: la obra se presenta sola. */
+  :global(html:not([data-stage="intro"]):not([data-stage="greeting"])) .waypoints {
     pointer-events: auto;
     opacity: 1;
   }
