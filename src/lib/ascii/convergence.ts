@@ -34,6 +34,14 @@ const SWEEP = 0.3;
 const LOGO_WIDTH = 1.1;
 const LOGO_HEIGHT = 0.8;
 const LOGO_TOP = 0.42;
+/**
+ * El logo del cierre: más pequeño y arriba, para dejar sitio al contacto. Con
+ * estas medidas el dibujo queda, como mucho, entre el 14 % y el 38 % del alto de
+ * la pantalla; en un teléfono lo limita el ancho y ocupa menos.
+ */
+const CLOSING_WIDTH = 0.8;
+const CLOSING_HEIGHT = 0.46;
+const CLOSING_TOP = 0.06;
 /** Parte de la disolución que dura el viaje de cada carácter hasta el logo. */
 const LOGO_TRAVEL = 0.6;
 /** Curvatura del viaje: sale siguiendo su pincelada antes de ir al logo. */
@@ -718,7 +726,10 @@ export class Convergence {
     }
   }
 
-  /** Prepara las figuras en orden: el logo, ninguna (solo ruido) y un símbolo por escena. */
+  /**
+   * Prepara las figuras en orden: el logo, ninguna (solo ruido), un símbolo por
+   * escena y el logo del cierre.
+   */
   private buildFormations(
     logo: HTMLImageElement,
     symbols: readonly (readonly string[])[],
@@ -760,9 +771,10 @@ export class Convergence {
     }
 
     this.formations = [
-      this.logoFormation(logo),
+      this.logoFormation(logo, LOGO_WIDTH, LOGO_HEIGHT, LOGO_TOP),
       emptyFormation(),
       ...symbols.map((art) => this.artFormation(art, portrait, pixelRatio)),
+      this.logoFormation(logo, CLOSING_WIDTH, CLOSING_HEIGHT, CLOSING_TOP),
     ];
 
     const [logoShape] = this.formations;
@@ -775,16 +787,17 @@ export class Convergence {
     }
   }
 
-  private logoFormation(logo: HTMLImageElement) {
+  /** El logo en un cuadro de hasta `wide` × `tall` de la pantalla, a la altura `top`. */
+  private logoFormation(logo: HTMLImageElement, wide: number, tall: number, top: number) {
     const { width, height } = this;
     const { cellWidth, cellHeight } = this.atlas;
-    const size = Math.min(width * LOGO_WIDTH, height * LOGO_HEIGHT);
+    const size = Math.min(width * wide, height * tall);
     const cols = Math.round(size / cellWidth);
     const rows = Math.round(size / cellHeight);
     // Sin logo cargado o sin espacio, la pintura se disuelve igual y llega la consola.
     if (!logo.naturalWidth || cols < 1 || rows < 1) return emptyFormation();
 
-    return this.maskFormation(cols, rows, 1, LOGO_TOP, (context) => {
+    return this.maskFormation(cols, rows, 1, top, (context) => {
       context.drawImage(logo, 0, 0, cols, rows);
     });
   }
