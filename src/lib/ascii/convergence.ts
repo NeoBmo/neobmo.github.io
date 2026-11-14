@@ -34,6 +34,14 @@ const SWEEP = 0.3;
 const LOGO_WIDTH = 1.1;
 const LOGO_HEIGHT = 0.8;
 const LOGO_TOP = 0.42;
+/**
+ * El logo del cierre: más pequeño y arriba, para dejar sitio al contacto. Con
+ * estas medidas el dibujo queda, como mucho, entre el 14 % y el 38 % del alto de
+ * la pantalla; en un teléfono lo limita el ancho y ocupa menos.
+ */
+const CLOSING_WIDTH = 0.8;
+const CLOSING_HEIGHT = 0.46;
+const CLOSING_TOP = 0.06;
 /** Parte de la disolución que dura el viaje de cada carácter hasta el logo. */
 const LOGO_TRAVEL = 0.6;
 /** Curvatura del viaje: sale siguiendo su pincelada antes de ir al logo. */
@@ -79,6 +87,23 @@ const AMBIENT_DENSITY = 0.05;
 const AMBIENT_ALPHA = 0.26;
 /** Cuánto se aleja cada uno de su sitio al vagar, en alturas de celda. */
 const AMBIENT_DRIFT = 1.4;
+/**
+ * Profundidad: cada carácter del ruido está a una distancia, y el scroll lo
+ * desplaza más cuanto más cerca está. Los cercanos se ven mayores y más claros.
+ * Parte del scroll que recorre el más lejano y el más cercano.
+ */
+const DEPTH_FAR = 0.12;
+const DEPTH_NEAR = 0.7;
+/** Tamaño y brillo del más lejano y del más cercano, respecto al normal. */
+const DEPTH_SCALE = [0.8, 1.25] as const;
+const DEPTH_ALPHA = [0.6, 1.3] as const;
+/**
+ * Junto al borde por el que un carácter da la vuelta, el ruido se apaga: así el
+ * salto no se ve, tampoco si lo pilla de camino a una figura. En alturas de celda.
+ */
+const SEAM_BAND = 4;
+/** Desde este punto del viaje a una figura, el carácter ya se ve aunque venga del borde. */
+const SEAM_CLEAR = 0.8;
 /** Distancia, en alturas de celda, a la que el ruido se apaga junto a una zona de calma. */
 const CALM_MARGIN = 3;
 /** Valores por zona en la lista que recibe `calm`: izquierda, arriba, derecha y abajo. */
@@ -164,6 +189,12 @@ export class Convergence {
   private ambientY = new Float32Array(0);
   private zones: Float32Array = new Float32Array(0);
   private zoneCount = 0;
+  // Cuánto ha bajado el visitante, y lo cerca (0–1) que está el último carácter
+  // de ruido calculado.
+  private travel = 0;
+  private near = 0;
+  // Lo lejos (0–1) que está ese mismo carácter del borde por el que da la vuelta.
+  private seam = 1;
   // Las dos figuras del fotograma también apartan el ruido, cada una con su peso.
   private nearBox: Formation["box"] = NO_BOX;
   private nearWeight = 0;
@@ -267,6 +298,11 @@ export class Convergence {
     this.waveCount = waveCount;
   }
 
+  /** Fija cuánto ha bajado el visitante, en píxeles: el ruido se desplaza con ello. */
+  drift(scroll: number) {
+    this.travel = scroll;
+  }
+
   /**
    * Fija dónde se apaga el ruido de fondo: los rectángulos de texto de la página,
    * en píxeles del lienzo.
@@ -315,8 +351,10 @@ export class Convergence {
         this.ambientAt(n, time);
         x = lerp(this.atX, shape.x[j], formed);
         y = lerp(this.atY, shape.y[j], formed);
-        scale = lerp(1, shape.scale, formed);
-        alpha = lerp(faint * this.clearAt(x, y), 1, formed);
+        scale = lerp(lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near), shape.scale, formed);
+        alpha =
+          lerp(faint * this.depthAlpha() * this.clearAt(x, y), 1, formed) *
+          lerp(this.seam, 1, smoothstep(SEAM_CLEAR, 1, formed));
         if (formed > 0.9) glyph = shape.glyph[j];
         else if (formed < 0.1) glyph = this.ambientGlyph(n, time);
         else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
@@ -324,10 +362,10 @@ export class Convergence {
         this.ambientAt(n, time);
         x = this.atX;
         y = this.atY;
-        alpha = faint * this.clearAt(x, y);
+        alpha = faint * this.depthAlpha() * this.clearAt(x, y) * this.seam;
         if (alpha < 0.01) continue;
         glyph = this.ambientGlyph(n, time);
-        scale = 1;
+        scale = lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near);
       } else if (inStart && inEnd) {
         const local = easeInOutCubic(clamp((mix - this.logoDelay[n]) / LOGO_TRAVEL));
         x = lerp(start.x[j], end.x[j], local);
@@ -439,11 +477,15 @@ export class Convergence {
       }
 
       let alpha = 1;
+      let scale = 1;
       if (scatter > 0) {
         this.ambientAt(i, time);
         x = lerp(x, this.atX, scatter);
         y = lerp(y, this.atY, scatter);
-        alpha = lerp(1, faint * this.clearAt(x, y), scatter);
+        scale = lerp(1, lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near), scatter);
+        alpha =
+          lerp(1, faint * this.depthAlpha() * this.clearAt(x, y), scatter) *
+          lerp(this.seam, 1, smoothstep(SEAM_CLEAR, 1, 1 - scatter));
         if (scatter > 0.9) glyph = this.ambientGlyph(i, time);
         else if (scatter > 0.1) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
       }
@@ -452,7 +494,7 @@ export class Convergence {
       batch[filled++] = x;
       batch[filled++] = y;
       batch[filled++] = glyph;
-      batch[filled++] = 1;
+      batch[filled++] = scale;
       batch[filled++] = alpha;
     }
 
@@ -518,13 +560,31 @@ export class Convergence {
     return Math.min(1, AMBIENT_ALPHA / Math.max(this.opacity, AMBIENT_ALPHA));
   }
 
-  /** Deja en `atX`/`atY` dónde vaga ahora el carácter `n` cuando es ruido. */
+  /**
+   * Deja en `atX`/`atY` dónde vaga ahora el carácter `n` cuando es ruido, y en
+   * `near` lo cerca que está.
+   */
   private ambientAt(n: number, time: number) {
     const reach = this.atlas.cellHeight * AMBIENT_DRIFT;
     const seed = this.noise[n];
+    // El orden barajado reparte las distancias por toda la pantalla.
+    this.near = this.logoDelay[n] / (1 - LOGO_TRAVEL);
+    // El scroll lo sube según su distancia; al salir por arriba vuelve por abajo,
+    // fuera de la vista, así que el viaje no se acaba.
+    const margin = reach + this.atlas.cellHeight;
+    const span = this.height + margin * 2;
+    const risen = this.ambientY[n] - this.travel * lerp(DEPTH_FAR, DEPTH_NEAR, this.near);
+    const along = (((risen + margin) % span) + span) % span;
+    const wrapped = along - margin;
+    this.seam = smoothstep(0, margin + this.atlas.cellHeight * SEAM_BAND, Math.min(along, span - along));
     // Dos ritmos distintos por eje: el vaivén no se repite a la vista.
     this.atX = this.ambientX[n] + Math.sin(time * (0.2 + seed * 0.3) + seed * 40) * reach;
-    this.atY = this.ambientY[n] + Math.cos(time * (0.15 + seed * 0.25) + seed * 71) * reach;
+    this.atY = wrapped + Math.cos(time * (0.15 + seed * 0.25) + seed * 71) * reach;
+  }
+
+  /** Brillo del último carácter de ruido calculado, según lo cerca que está. */
+  private depthAlpha() {
+    return lerp(DEPTH_ALPHA[0], DEPTH_ALPHA[1], this.near);
   }
 
   /** Cada carácter del ruido cambia a su ritmo, de vez en cuando. */
@@ -681,7 +741,10 @@ export class Convergence {
     }
   }
 
-  /** Prepara las figuras en orden: el logo, ninguna (solo ruido) y un símbolo por escena. */
+  /**
+   * Prepara las figuras en orden: el logo, ninguna (solo ruido), un símbolo por
+   * escena y el logo del cierre.
+   */
   private buildFormations(
     logo: HTMLImageElement,
     symbols: readonly (readonly string[])[],
@@ -723,9 +786,10 @@ export class Convergence {
     }
 
     this.formations = [
-      this.logoFormation(logo),
+      this.logoFormation(logo, LOGO_WIDTH, LOGO_HEIGHT, LOGO_TOP),
       emptyFormation(),
       ...symbols.map((art) => this.artFormation(art, portrait, pixelRatio)),
+      this.logoFormation(logo, CLOSING_WIDTH, CLOSING_HEIGHT, CLOSING_TOP),
     ];
 
     const [logoShape] = this.formations;
@@ -738,16 +802,17 @@ export class Convergence {
     }
   }
 
-  private logoFormation(logo: HTMLImageElement) {
+  /** El logo en un cuadro de hasta `wide` × `tall` de la pantalla, a la altura `top`. */
+  private logoFormation(logo: HTMLImageElement, wide: number, tall: number, top: number) {
     const { width, height } = this;
     const { cellWidth, cellHeight } = this.atlas;
-    const size = Math.min(width * LOGO_WIDTH, height * LOGO_HEIGHT);
+    const size = Math.min(width * wide, height * tall);
     const cols = Math.round(size / cellWidth);
     const rows = Math.round(size / cellHeight);
     // Sin logo cargado o sin espacio, la pintura se disuelve igual y llega la consola.
     if (!logo.naturalWidth || cols < 1 || rows < 1) return emptyFormation();
 
-    return this.maskFormation(cols, rows, 1, LOGO_TOP, (context) => {
+    return this.maskFormation(cols, rows, 1, top, (context) => {
       context.drawImage(logo, 0, 0, cols, rows);
     });
   }

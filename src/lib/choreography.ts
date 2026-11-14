@@ -42,9 +42,9 @@ export const MAX_WAVES = 3;
 export const SCENE_HOLD = 0.25;
 
 /**
- * Parte de la última pantalla que el lienzo espera antes de empezar a rebobinar
- * hacia el logo. En ese tramo se apaga el texto de la escena anterior, para que
- * las figuras del rebobinado no se dibujen encima de él.
+ * Parte de la última pantalla que el lienzo espera antes de empezar a armar el
+ * logo del cierre. En ese tramo se apaga el texto de la escena anterior, para que
+ * los caracteres que viajan no se dibujen encima de él.
  */
 export const FINALE_HOLD = 0.3;
 

@@ -166,7 +166,7 @@ export async function mountHero() {
   // El ruido se mueve solo: se dibuja despacio y se duerme si nadie hace nada.
   let lastDraw = 0;
   let lastInput = performance.now();
-  // El final de la página: de 0 a 1 mientras entra, el lienzo rebobina hasta el logo.
+  // El final de la página: de 0 a 1 mientras entra, el lienzo arma el logo del cierre.
   const ending = document.querySelector<HTMLElement>("[data-finale]");
   const leaving = ending?.previousElementSibling;
   let finale = 0;
@@ -213,6 +213,7 @@ export async function mountHero() {
     scene.dim(reducedMotion.matches ? 1 : lerp(1, HORIZON_ALPHA, veil));
     if (reducedMotion.matches) return scene.render(elapsed, true);
     scene.disturb(pointerX, pointerY, force, sway, waves, waveCount);
+    scene.drift(window.scrollY);
     // Desde el logo mandan las figuras, con el ruido de fondo alrededor.
     if (position >= 1) scene.renderFormation(position - 1, elapsed);
     else scene.render(elapsed, false, position);
@@ -294,11 +295,10 @@ export async function mountHero() {
 
     const dissolve = clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION);
     const release = clamp((elapsed - releaseAt) / RELEASE_DURATION);
-    // El final multiplica por lo que falta todo lo recorrido después del logo: lo
-    // deshace pasando por cada figura hasta dejar el logo, y al subir lo rehace en
-    // el mismo orden. La pintura no vuelve: es solo del principio.
-    const journey = release + (introRunning ? 0 : scenery);
-    const target = dissolve + journey * (1 - finale);
+    // Tras la intro manda el scroll: un símbolo por escena y, al final, el logo
+    // del cierre. La pintura no vuelve: es solo del principio.
+    const journey = release + (introRunning ? 0 : scenery + finale);
+    const target = dissolve + journey;
     const veilTarget = release * (1 - finale);
 
     // La intro va exacta al reloj; después los caracteres persiguen al scroll,

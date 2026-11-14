@@ -101,6 +101,44 @@ html[data-stage="greeting"] {
   margin: 1.4em 0 0;
 }
 
+/* Entrada y salida de una escena: su texto entra por partes al llegar y se retira
+   al irse. La primera tiene su propia entrada, la de la intro. Solo en pantalla:
+   impreso, todo el texto está. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  [data-reveal] .scene :is(.scene__body, .panel) > * {
+    transition:
+      opacity 0.5s var(--ease-out),
+      transform 0.6s var(--ease-out);
+    transition-delay: calc(var(--order, 0) * 70ms);
+  }
+
+  [data-reveal] .scene:not([data-present]) :is(.scene__body, .panel) > * {
+    opacity: 0;
+    transform: translateY(0.8em);
+    transition-delay: 0s;
+  }
+
+  .scene :is(.scene__body, .panel) > :nth-child(2) {
+    --order: 1;
+  }
+
+  .scene :is(.scene__body, .panel) > :nth-child(3) {
+    --order: 2;
+  }
+
+  .scene :is(.scene__body, .panel) > :nth-child(4) {
+    --order: 3;
+  }
+
+  .scene :is(.scene__body, .panel) > :nth-child(5) {
+    --order: 4;
+  }
+
+  .scene :is(.scene__body, .panel) > :nth-child(n + 6) {
+    --order: 5;
+  }
+}
+
 /* La misma frontera que usa el lienzo: en vertical el símbolo va arriba y el texto abajo. */
 @media (max-aspect-ratio: 6/7) {
   .scene[data-symbol] {

@@ -20,9 +20,12 @@ const stops = [
 <nav class="waypoints" aria-label="Paradas de la página" data-waypoints>
   <ol role="list">
     {
-      stops.map(({ target, label }) => (
-        <li>
+      stops.map(({ target, label }, index) => (
+        <li style={`--order: ${index}`}>
           <a href={`#${target}`} data-label={label}>
+            <span aria-hidden="true" data-glyph>
+              ·
+            </span>
             <span class="visually-hidden">{label}</span>
           </a>
         </li>
@@ -32,7 +35,8 @@ const stops = [
 </nav>
 
 <style>
-  /* Sin barra de scroll, esto dice dónde se está, cuánto falta y deja saltar. */
+  /* Sin barra de scroll, esto dice dónde se está y cuánto falta. Está hecho de los
+     mismos caracteres que el resto, y solo aparece mientras el visitante navega. */
   .waypoints {
     position: fixed;
     top: 50%;
@@ -40,16 +44,13 @@ const stops = [
     z-index: 1;
     font-size: var(--text-sm);
     line-height: 1;
-    pointer-events: none;
-    opacity: 0;
     transform: translateY(-50%);
-    transition: opacity 0.4s var(--ease-out);
   }
 
-  /* Aparece cuando la intro termina y la página se abre: la obra se presenta sola. */
-  :global(html:not([data-stage="intro"]):not([data-stage="greeting"])) .waypoints {
-    pointer-events: auto;
-    opacity: 1;
+  /* Durante la intro no existe: la obra se presenta sola. */
+  :global(html[data-stage="intro"]) .waypoints,
+  :global(html[data-stage="greeting"]) .waypoints {
+    visibility: hidden;
   }
 
   ol {
@@ -58,7 +59,7 @@ const stops = [
     list-style: none;
   }
 
-  /* El punto es pequeño, pero el área que se toca no baja de 24 px. */
+  /* El carácter es pequeño, pero el área que se toca no baja de 24 px. */
   a {
     position: relative;
     display: grid;
@@ -69,16 +70,9 @@ const stops = [
     text-decoration: none;
   }
 
-  a::before {
-    font-size: 1.5em;
-    content: "·";
-  }
-
-  /* La parada actual es el cursor de la terminal. */
-  a[aria-current]::before {
-    font-size: 0.7em;
+  /* La parada actual es la que brilla. */
+  a[aria-current] {
     color: var(--color-signal);
-    content: "█";
   }
 
   a::after {
@@ -105,5 +99,26 @@ const stops = [
     a:hover::after {
       opacity: 1;
     }
+  }
+
+  /* Con el script, en reposo se retira: no invita a saltarse el recorrido. Los
+     caracteres entran y salen uno tras otro. */
+  .waypoints[data-enhanced] li {
+    opacity: 0;
+    transform: translateX(0.8em);
+    transition:
+      opacity 0.3s var(--ease-out),
+      transform 0.3s var(--ease-out);
+    transition-delay: calc(var(--order) * 30ms);
+  }
+
+  .waypoints[data-enhanced]:not([data-awake]):not(:focus-within) {
+    pointer-events: none;
+  }
+
+  .waypoints[data-awake] li,
+  .waypoints:focus-within li {
+    opacity: 1;
+    transform: none;
   }
 </style>
