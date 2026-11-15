@@ -102,10 +102,11 @@ const stops = [
   }
 
   /* Con el script, en reposo se retira: no invita a saltarse el recorrido. Los
-     caracteres entran y salen uno tras otro. */
+     caracteres entran y salen uno tras otro, hacia dentro: hacia fuera ensancharían
+     la página más allá del borde y habría scroll horizontal. */
   .waypoints[data-enhanced] li {
     opacity: 0;
-    transform: translateX(0.8em);
+    transform: translateX(-0.8em);
     transition:
       opacity 0.3s var(--ease-out),
       transform 0.3s var(--ease-out);

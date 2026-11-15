@@ -1,17 +1,17 @@
 /**
- * Segundos de la intro, que corre sola: el caos forma la pintura (hasta ~5,5),
- * se contempla, y se disuelve en el logo.
+ * Segundos de la intro, que corre sola y abre la página a los 7: el caos forma
+ * la pintura (0–2), se contempla (2–5), se disuelve en el logo (5–6) y el logo se
+ * deshace en el ruido (6–7) mientras la terminal empieza a escribir.
  */
-export const DISSOLVE_START = 7.8;
-export const DISSOLVE_DURATION = 1.4;
+export const DISSOLVE_START = 5;
+export const DISSOLVE_DURATION = 1;
 export const LOGO_AT = DISSOLVE_START + DISSOLVE_DURATION;
 
-/** Con el logo formado, lo que espera el saludo antes de escribirse. */
+/** Lo que el logo se sostiene antes de deshacerse, y lo que tarda en hacerlo. */
+export const LOGO_HOLD = 0.1;
+export const RELEASE_DURATION = 0.9;
+/** Con el logo formado, lo que espera la terminal antes de escribir. */
 export const GREETING_DELAY = 0.3;
-/** Con el saludo escrito, lo que se sostiene antes de soltar al visitante. */
-export const GREETING_HOLD = 0.9;
-/** Lo que tarda el logo en deshacerse en el ruido de fondo. */
-export const RELEASE_DURATION = 1.6;
 
 /** Un gesto durante la intro la acelera de forma gradual hasta este ritmo. */
 export const MAX_RATE = 8;

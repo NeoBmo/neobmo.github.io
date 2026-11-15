@@ -38,7 +38,10 @@ const sections = defineCollection({
     repo: z.url().optional(),
     /** Figura que forman los caracteres del lienzo al llegar a la sección. */
     symbol: z.enum(SYMBOL_NAMES).optional(),
-    /** Saludo que se escribe solo al acabar la intro y queda como título de la sección. */
+    /**
+     * Lo que escribe la terminal al acabar la intro, toma a toma: de una a la
+     * siguiente borra hasta lo que comparten. La última queda como título.
+     */
     greeting: z.array(z.string()).default([]),
     /** Enlaces de contacto. */
     links: z.array(z.object({ label: z.string(), url: z.url() })).default([]),

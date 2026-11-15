@@ -51,12 +51,9 @@ const year = new Date().getFullYear();
           data-opening={data.greeting.length > 0 ? "" : undefined}
         >
           {data.greeting.length > 0 && (
-            <p class="greeting" aria-hidden="true">
-              {data.greeting.map((line) => (
-                <span class="greeting__line">
-                  &gt; <span data-greeting-line={line}>{line}</span>
-                </span>
-              ))}
+            <p class="greeting" aria-hidden="true" data-greeting={JSON.stringify(data.greeting)}>
+              &gt; <span data-greeting-text>{data.greeting.at(-1)}</span>
+              <span class="greeting__cursor">█</span>
             </p>
           )}
           {data.kicker && <p class="scene__note">{data.kicker}</p>}
@@ -109,34 +106,23 @@ const year = new Date().getFullYear();
     display: contents;
   }
 
-  /* El saludo se escribe solo al acabar la intro y queda como título de la sección. */
+  /* Una línea de terminal: se escribe sola al acabar la intro y queda como título.
+     En un teléfono la letra se ajusta al ancho para que la línea quepa entera
+     (unos 32 caracteres); si ni así cabe, se parte en vez de salirse. */
   .greeting {
     margin: 0 0 0.6em;
-    font-size: var(--text-lg);
+    font-size: min(var(--text-lg), 4.6vw);
     font-weight: 600;
     line-height: 1.4;
-  }
-
-  .greeting__line {
-    display: block;
-    white-space: pre;
-  }
-
-  /* El cursor va en la línea que se escribe; las siguientes esperan su turno. */
-  .greeting__line[data-typing]::after {
-    content: "█";
-  }
-
-  .greeting__line:not([data-typing]):has([data-greeting-line]:empty) {
-    visibility: hidden;
+    white-space: pre-wrap;
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .greeting__line[data-typing]::after {
+    .greeting__cursor {
       animation: blink 1s steps(1) infinite;
     }
 
-    /* Al abrirse la página, el saludo sube a su sitio y el resto aparece. */
+    /* Al abrirse la página, la terminal sube a su sitio y el resto aparece. */
     .opening {
       transition: transform 1s var(--ease-out);
     }
@@ -145,7 +131,8 @@ const year = new Date().getFullYear();
       transition: opacity 0.8s var(--ease-out) 0.3s;
     }
 
-    /* Durante la intro el bloque espera debajo del logo, y solo se ve el saludo. */
+    /* Durante la intro el bloque espera con la terminal en el centro de la
+       pantalla, y solo se ve ella. */
     :global(html[data-stage="intro"]) .opening,
     :global(html[data-stage="greeting"]) .opening {
       transform: translateY(var(--intro-shift, 0px));
@@ -175,21 +162,27 @@ const year = new Date().getFullYear();
   }
 
   /* El cierre: una sola columna centrada, igual en un teléfono que en escritorio.
-     Arriba, el logo; debajo, la invitación a escribir. */
+     El título queda justo en el centro de la pantalla; el logo, encima. */
   .finale {
+    position: relative;
     justify-content: flex-start;
     align-items: center;
-    padding: 0 var(--space-gutter) var(--space-gutter);
+    /* Medio título por encima del centro: su línea mide 1,2 veces la letra. */
+    padding: calc(50svh - 0.6 * var(--text-lg)) var(--space-gutter) var(--space-gutter);
     text-align: center;
   }
 
-  /* Guarda el sitio del logo, que arma el lienzo en ese mismo hueco. Sin lienzo
-     animado (movimiento reducido) se ve la imagen. */
+  /* El logo lo arma el lienzo: su dibujo acaba al 40 % de la pantalla. Sin lienzo
+     animado (movimiento reducido) se ve esta imagen en el mismo sitio. Su dibujo
+     ocupa del 24 % al 76 % de su alto. */
   .finale__mark {
+    position: absolute;
+    top: calc(40svh - 0.76 * 30svh);
+    left: 50%;
     width: auto;
-    height: 25svh;
-    margin: 13svh 0 6svh;
+    height: 30svh;
     visibility: hidden;
+    transform: translateX(-50%);
   }
 
   @media (prefers-reduced-motion: reduce) {

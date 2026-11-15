@@ -1,10 +1,10 @@
 ---
 title: Sobre mí
 summary: Convierto ideas caóticas y procesos anticuados en herramientas simples. Soy desarrollador frontend en Barranquilla, Colombia, y trabajo con React, TypeScript, automatización e IA aplicada.
-kicker: Abierto a empleo y a proyectos
+kicker: Desarrollador autodidacta
 greeting:
   - hola, soy NeoBmo
-  - me llamo Luis Rodríguez
+  - hola, me llamo Luis Rodríguez
 order: 1
 ---
 
