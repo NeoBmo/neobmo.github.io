@@ -9,16 +9,21 @@ import { clamp, createRandom, easeInOutCubic, easeOutCubic, lerp, smoothstep } f
  * travels, lands, and only then do colour and life arrive.
  */
 const TIMING = {
-  revealStart: 0.3,
-  reveal: 2.8,
-  departure: 2.4,
-  stagger: 1.4,
-  travel: 1.7,
-  colorStart: 4.2,
-  colorDuration: 1.6,
-  lifeStart: 5.4,
-  lifeDuration: 2.2,
+  revealStart: 0.05,
+  reveal: 1.9,
+  departure: 0.7,
+  stagger: 0.9,
+  travel: 1.3,
+  colorStart: 2,
+  colorDuration: 0.9,
+  lifeStart: 2.6,
+  lifeDuration: 1,
 };
+/**
+ * Cuánto crece el caos al empezar: los caracteres aparecen en curva exponencial,
+ * y al final del tramo llegan unas e⁶ ≈ 400 veces más rápido que al principio.
+ */
+const GROWTH = 6;
 
 /** Points per journey: a random origin, then a stroke that ends at home. */
 const STROKE_STEPS = 18;
@@ -35,13 +40,14 @@ const LOGO_WIDTH = 1.1;
 const LOGO_HEIGHT = 0.8;
 const LOGO_TOP = 0.42;
 /**
- * El logo del cierre: más pequeño y arriba, para dejar sitio al contacto. Con
- * estas medidas el dibujo queda, como mucho, entre el 14 % y el 38 % del alto de
- * la pantalla; en un teléfono lo limita el ancho y ocupa menos.
+ * El logo del cierre: más pequeño y en la parte de arriba, entre el ruido.
+ * Su dibujo acaba a esta altura de la pantalla, justo encima del título.
  */
 const CLOSING_WIDTH = 0.8;
-const CLOSING_HEIGHT = 0.46;
-const CLOSING_TOP = 0.06;
+const CLOSING_HEIGHT = 0.6;
+const CLOSING_BOTTOM = 0.4;
+/** En el cierre, el ruido solo queda por encima de esta franja; debajo, negro. */
+const CLOSING_QUIET = [0.34, 0.44] as const;
 /** Parte de la disolución que dura el viaje de cada carácter hasta el logo. */
 const LOGO_TRAVEL = 0.6;
 /** Curvatura del viaje: sale siguiendo su pincelada antes de ir al logo. */
@@ -211,6 +217,10 @@ export class Convergence {
   // de ruido calculado.
   private travel = 0;
   private near = 0;
+  // Mientras el logo se deshace, el ruido va apareciendo (0–1); en el cierre, la
+  // parte de abajo se queda en negro (0–1). Fuera de esos tramos, -1 y 0.
+  private emerging = -1;
+  private closing = 0;
   // El reloj del fotograma y cuánto falta para el blanco pleno: el pulso los usa.
   private clock = 0;
   private boost = 1;
@@ -352,6 +362,9 @@ export class Convergence {
     this.clock = time;
     // Lo que falta para el blanco pleno depende de cuánto esté atenuado el lienzo.
     this.boost = 1 / Math.max(this.opacity, 0.01);
+    // Al salir del logo, el ruido aún no está: aparece mientras el logo se deshace.
+    this.emerging = from === 0 ? mix : -1;
+    this.closing = from + 1 === formations.length - 1 ? mix : 0;
     this.nearBox = start.box;
     this.nearWeight = 1 - mix;
     this.farBox = end.box;
@@ -388,7 +401,7 @@ export class Convergence {
         this.ambientAt(n, time);
         x = this.atX;
         y = this.atY;
-        alpha = faint * this.depthAlpha() * this.clearAt(x, y) * this.seam;
+        alpha = faint * this.depthAlpha() * this.clearAt(x, y) * this.seam * this.presence(n);
         if (alpha < 0.01) continue;
         glyph = this.ambientGlyph(n, time);
         scale = lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near);
@@ -453,21 +466,12 @@ export class Convergence {
 
     const flicker = Math.floor(time * 12);
     const stirred = !still && (this.force > 0 || this.sway !== 0 || this.waveCount > 0);
-    const faint = this.ambientAlpha();
-    this.nearBox = this.formations[0]?.box ?? NO_BOX;
-    this.nearWeight = dissolve;
-    this.farWeight = 0;
 
     for (let i = 0; i < this.count; i++) {
       if (t < this.appear[i]) continue;
-      // De los caracteres que no forman el logo, unos se quedan como ruido de fondo
-      // y el resto desaparece uno a uno, sin transparencia.
-      let scatter = 0;
-      if (!this.inLogo[i]) {
-        if (this.ambient[i]) {
-          scatter = easeInOutCubic(clamp((dissolve - this.logoDelay[i]) / LOGO_TRAVEL));
-        } else if (dissolve > this.fade[i]) continue;
-      }
+      // Los caracteres que no forman el logo desaparecen uno a uno, sin
+      // transparencia: el logo queda sobre negro.
+      if (!this.inLogo[i] && dissolve > this.fade[i]) continue;
       const toLogo = this.inLogo[i]
         ? easeInOutCubic(clamp((dissolve - this.logoDelay[i]) / LOGO_TRAVEL))
         : 0;
@@ -508,26 +512,12 @@ export class Convergence {
         if (strength > POINTER_NOISE) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
       }
 
-      let alpha = 1;
-      let scale = 1;
-      if (scatter > 0) {
-        this.ambientAt(i, time);
-        x = lerp(x, this.atX, scatter);
-        y = lerp(y, this.atY, scatter);
-        scale = lerp(1, lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near), scatter);
-        alpha =
-          lerp(1, faint * this.depthAlpha() * this.clearAt(x, y), scatter) *
-          lerp(this.seam, 1, smoothstep(SEAM_CLEAR, 1, 1 - scatter));
-        if (scatter > 0.9) glyph = this.ambientGlyph(i, time);
-        else if (scatter > 0.1) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
-      }
-
       if (glyph === EMPTY) continue;
       batch[filled++] = x;
       batch[filled++] = y;
       batch[filled++] = glyph;
-      batch[filled++] = scale;
-      batch[filled++] = alpha;
+      batch[filled++] = 1;
+      batch[filled++] = 1;
     }
 
     this.renderer.draw(batch, filled / GLYPH_STRIDE, color, this.opacity);
@@ -576,12 +566,6 @@ export class Convergence {
     return strength;
   }
 
-  /** Borde inferior del logo, en píxeles del lienzo: de ahí hacia abajo queda sitio libre. */
-  get logoBottom() {
-    const bottom = this.formations[0]?.box[3] ?? -Infinity;
-    return Number.isFinite(bottom) ? bottom + this.atlas.cellHeight / 2 : this.height / 2;
-  }
-
   /** Fija la opacidad del próximo dibujo, para que el texto de encima se lea. */
   dim(alpha: number) {
     this.opacity = alpha;
@@ -628,6 +612,16 @@ export class Convergence {
     this.atY = wrapped + Math.cos(time * (0.15 + seed * 0.25) + seed * 71) * reach;
   }
 
+  /**
+   * Cuánto se ve el carácter de ruido `n` mientras el logo se deshace: cada uno
+   * aparece en su momento, así que el ruido llena la pantalla poco a poco.
+   */
+  private presence(n: number) {
+    if (this.emerging < 0) return 1;
+    const from = this.fade[n] * 0.7;
+    return smoothstep(from, from + 0.3, this.emerging);
+  }
+
   /** Brillo del último carácter de ruido calculado, según lo cerca que está. */
   private depthAlpha() {
     return lerp(DEPTH_ALPHA[0], DEPTH_ALPHA[1], this.near);
@@ -648,6 +642,11 @@ export class Convergence {
     let quiet = Math.max(
       this.nearWeight * inside(this.nearBox, x, y, margin),
       this.farWeight * inside(this.farBox, x, y, margin),
+    );
+    // En el cierre, de la franja hacia abajo queda en negro: el ruido se queda arriba.
+    quiet = Math.max(
+      quiet,
+      this.closing * smoothstep(this.height * CLOSING_QUIET[0], this.height * CLOSING_QUIET[1], y),
     );
     const { zones } = this;
     for (let z = 0; z < this.zoneCount * CALM_STRIDE && quiet < 1; z += CALM_STRIDE) {
@@ -738,9 +737,10 @@ export class Convergence {
         this.dirX[n] = Math.cos(angle);
         this.dirY[n] = Math.sin(angle);
         this.phase[n] = (hx * this.dirX[n] + hy * this.dirY[n]) / wavelength;
-        // La raíz cúbica retrasa las llegadas: el caos empieza con unos pocos
-        // caracteres y acaba en multitud.
-        this.appear[n] = TIMING.revealStart + Math.cbrt(random()) * TIMING.reveal;
+        // Las llegadas siguen una curva exponencial: unos pocos caracteres y luego
+        // una multitud.
+        this.appear[n] =
+          TIMING.revealStart + (Math.log1p(random() * Math.expm1(GROWTH)) / GROWTH) * TIMING.reveal;
         // Light leaves first: stars, then sky, then the village and cypress.
         this.departure[n] = Math.max(
           this.appear[n] + 0.2,
@@ -835,7 +835,7 @@ export class Convergence {
       this.logoFormation(logo, LOGO_WIDTH, LOGO_HEIGHT, LOGO_TOP),
       emptyFormation(),
       ...symbols.map((symbol) => this.artFormation(symbol, portrait, pixelRatio)),
-      this.logoFormation(logo, CLOSING_WIDTH, CLOSING_HEIGHT, CLOSING_TOP),
+      this.logoFormation(logo, CLOSING_WIDTH, CLOSING_HEIGHT, LOGO_TOP, CLOSING_BOTTOM),
     ];
 
     const [logoShape] = this.formations;
@@ -848,8 +848,17 @@ export class Convergence {
     }
   }
 
-  /** El logo en un cuadro de hasta `wide` × `tall` de la pantalla, a la altura `top`. */
-  private logoFormation(logo: HTMLImageElement, wide: number, tall: number, top: number) {
+  /**
+   * El logo en un cuadro de hasta `wide` × `tall` de la pantalla, a la altura `top`.
+   * Con `bottom`, se coloca de modo que su dibujo acabe a esa altura.
+   */
+  private logoFormation(
+    logo: HTMLImageElement,
+    wide: number,
+    tall: number,
+    top: number,
+    bottom?: number,
+  ): Formation {
     const { width, height } = this;
     const { cellWidth, cellHeight } = this.atlas;
     const size = Math.min(width * wide, height * tall);
@@ -858,9 +867,14 @@ export class Convergence {
     // Sin logo cargado o sin espacio, la pintura se disuelve igual y llega la consola.
     if (!logo.naturalWidth || cols < 1 || rows < 1) return emptyFormation();
 
-    return this.maskFormation(cols, rows, 1, top, (context) => {
+    const shape = this.maskFormation(cols, rows, 1, top, (context) => {
       context.drawImage(logo, 0, 0, cols, rows);
     });
+    if (bottom === undefined || shape.size < 1) return shape;
+    // El dibujo no llena su cuadro: se mide dónde acaba de verdad y se desplaza.
+    const shift = this.height * bottom - (shape.box[3] + this.atlas.cellHeight / 2);
+    for (let j = 0; j < shape.size; j++) shape.y[j] += shift;
+    return { ...shape, box: boxOf(shape.x, shape.y, shape.size) };
   }
 
   /** Convierte un dibujo de arte ASCII en figura: cada carácter ocupa su celda. */

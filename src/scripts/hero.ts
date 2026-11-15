@@ -11,9 +11,9 @@ import {
   DISSOLVE_START,
   FINALE_HOLD,
   GREETING_DELAY,
-  GREETING_HOLD,
   HORIZON_ALPHA,
   LOGO_AT,
+  LOGO_HOLD,
   MAX_RATE,
   MAX_WAVES,
   POINTER_HOLD_MS,
@@ -27,7 +27,7 @@ import {
   WAVE_DURATION_MS,
   WAVE_REACH,
 } from "../lib/choreography";
-import { typedAt, typingTime } from "../lib/greeting";
+import { keystrokes, typedAt } from "../lib/greeting";
 import { SYMBOLS, SYMBOL_PARTS, type SymbolName } from "../lib/symbols";
 
 const FONT_FAMILY = '"JetBrains Mono", monospace';
@@ -52,8 +52,8 @@ const QUALITY = [
 const SLOW_FRAME_MS = 1000 / 50;
 const SLOW_RATIO = 1.3;
 /** Segundos de intro: hasta aquí se toma la referencia y desde aquí se mide. */
-const BASELINE_UNTIL = 0.8;
-const MEASURE_FROM = 3;
+const BASELINE_UNTIL = 0.5;
+const MEASURE_FROM = 1.4;
 /** Fotogramas por ventana de medida, y los mínimos para fiarse de la referencia. */
 const QUALITY_WINDOW = 30;
 const BASELINE_FRAMES = 5;
@@ -81,8 +81,6 @@ function storeQuality(level: number) {
   }
 }
 
-/** Espacio, en píxeles, entre el logo y el saludo que se escribe debajo. */
-const GREETING_GAP = 24;
 /** Teclas y gestos que, durante la intro, la aceleran. */
 const HURRY_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
@@ -143,15 +141,21 @@ export async function mountHero() {
   let lastFrame = 0;
   let frame = 0;
   let rate = 1;
-  // La intro corre sola: pintura, logo, saludo escrito y logo que se deshace. En
-  // qué tramo va lo sabe la página por `data-stage`, y el CSS decide qué se ve.
+  // La intro corre sola: pintura, logo que se deshace en ruido y una terminal que
+  // escribe. En qué tramo va lo sabe la página por `data-stage`, y el CSS decide
+  // qué se ve.
   const root = document.documentElement;
   const opening = document.querySelector<HTMLElement>("[data-opening]");
-  const greetingLines = [...document.querySelectorAll<HTMLElement>("[data-greeting-line]")];
-  const greeting = greetingLines.map((line) => line.dataset.greetingLine ?? "");
+  const terminal = document.querySelector<HTMLElement>("[data-greeting]");
+  const typing = terminal?.querySelector<HTMLElement>("[data-greeting-text]");
+  const takes: string[] = JSON.parse(terminal?.dataset.greeting ?? "[]");
+  const strokes = keystrokes(takes);
   const greetingAt = LOGO_AT + GREETING_DELAY;
-  const releaseAt = greetingAt + typingTime(greeting) + GREETING_HOLD;
+  const releaseAt = LOGO_AT + LOGO_HOLD;
+  // La página se abre cuando el logo se ha deshecho; la terminal acaba después.
   const introEnd = releaseAt + RELEASE_DURATION;
+  const typedBy = greetingAt + (strokes.at(-1)?.at ?? 0);
+  let typed = false;
   let stage = root.dataset.stage ?? "";
   // Un gesto durante la intro no desplaza la página: la acelera.
   let hurry = false;
@@ -265,6 +269,7 @@ export async function mountHero() {
     if (!reducedMotion.matches && !root.dataset.stage) {
       stage = "";
       elapsed = introEnd;
+      finishTyping();
     }
     canvas.dataset.ready = "";
     play();
@@ -281,19 +286,14 @@ export async function mountHero() {
     rate += (targetRate - rate) * Math.min(delta * RATE_RESPONSE, 1);
     elapsed += delta * rate;
 
-    // El saludo se escribe solo bajo el logo; al terminar, la página se abre.
+    // La terminal escribe sola, también un poco después de abrirse la página.
+    if (!typed && typing) {
+      const text = typedAt(strokes, elapsed - greetingAt);
+      if (typing.textContent !== text) typing.textContent = text;
+      typed = elapsed >= typedBy;
+    }
     if (stage !== "open") {
-      const typed = typedAt(greeting, elapsed - greetingAt);
-      let writing = 0;
-      greetingLines.forEach((line, index) => {
-        if (line.textContent !== typed[index]) line.textContent = typed[index];
-        if (typed[index]) writing = index;
-      });
-      // El cursor acompaña a la línea que se está escribiendo.
-      greetingLines.forEach((line, index) =>
-        line.parentElement?.toggleAttribute("data-typing", index === writing),
-      );
-      setStage(elapsed < greetingAt ? "intro" : elapsed < releaseAt ? "greeting" : "open");
+      setStage(elapsed < greetingAt ? "intro" : elapsed < introEnd ? "greeting" : "open");
     }
 
     const dissolve = clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION);
@@ -458,12 +458,20 @@ export async function mountHero() {
     setTimeout(calm, 1100);
   }
 
-  /** Durante la intro, el saludo se escribe justo debajo del logo. */
+  /** Durante la intro, la terminal escribe en el centro de la pantalla. */
   function place() {
-    if (!opening) return;
-    // `offsetTop` no cuenta el desplazamiento: es el sitio que tendrá al abrirse.
-    const shift = scene.logoBottom + GREETING_GAP - (opening.offsetTop - window.scrollY);
-    opening.style.setProperty("--intro-shift", `${Math.max(0, Math.round(shift))}px`);
+    if (!opening || !terminal) return;
+    // Se descuenta el desplazamiento que ya tenga: así sale el sitio que tendrá al abrirse.
+    const box = terminal.getBoundingClientRect();
+    const applied = new DOMMatrix(getComputedStyle(opening).transform).m42;
+    const middle = box.top - applied + box.height / 2;
+    opening.style.setProperty("--intro-shift", `${Math.round(window.innerHeight / 2 - middle)}px`);
+  }
+
+  /** La terminal muestra ya su última toma, sin escribirla. */
+  function finishTyping() {
+    typed = true;
+    if (typing) typing.textContent = takes.at(-1) ?? "";
   }
 
   // Lo que depende del scroll se lee una vez por fotograma.
@@ -545,7 +553,7 @@ export async function mountHero() {
     waveCount = 0;
     // Sin movimiento no hay intro: el saludo completo y la página abierta.
     if (reducedMotion.matches) {
-      greetingLines.forEach((line, index) => (line.textContent = greeting[index]));
+      finishTyping();
       setStage("");
     }
     if (ready) draw();
