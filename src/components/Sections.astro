@@ -64,13 +64,6 @@ const year = new Date().getFullYear();
             {data.title}
           </h2>
           <p>{data.summary}</p>
-          {data.steps.length > 0 && (
-            <ol class="steps" role="list">
-              {data.steps.map((step) => (
-                <li>{step}</li>
-              ))}
-            </ol>
-          )}
           {data.links.length > 0 && (
             <ul class="scene__links contact" role="list">
               {data.links.map(({ label, url }) => (
@@ -179,27 +172,6 @@ const year = new Date().getFullYear();
     margin: 0.3em 0 0.4em;
     font-size: var(--text-lg);
     line-height: 1.2;
-  }
-
-  /* Los pasos van numerados y en línea: se leen como un recorrido, no como una lista. */
-  .steps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3em 1.2em;
-    margin: 1em 0 0;
-    padding: 0;
-    font-size: var(--text-sm);
-    color: var(--color-dim);
-    list-style: none;
-    counter-reset: step;
-  }
-
-  .steps li {
-    counter-increment: step;
-  }
-
-  .steps li::before {
-    content: counter(step, decimal-leading-zero) " ";
   }
 
   /* El cierre: una sola columna centrada, igual en un teléfono que en escritorio.

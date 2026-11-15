@@ -231,7 +231,9 @@ function canvasRenderer(canvas: HTMLCanvasElement, context: CanvasRenderingConte
       for (let i = 0; i < count * GLYPH_STRIDE; i += GLYPH_STRIDE) {
         const drawWidth = cellWidth * glyphs[i + 3];
         const drawHeight = cellHeight * glyphs[i + 3];
-        context.globalAlpha = glyphs[i + 4];
+        // Un valor por encima de 1 no se aplicaría: aquí el pulso no puede brillar
+        // más que el resto, así que el respaldo no lo enciende.
+        context.globalAlpha = Math.min(1, glyphs[i + 4]);
         context.drawImage(
           atlas.canvas,
           glyphs[i + 2] * sourceWidth, 0, sourceWidth, sourceHeight,
