@@ -1,7 +1,7 @@
 ---
 title: Cómo trabajo con IA
 kicker: Método · 01/03
-summary: Trabajo con un agente de IA en un bucle que puede recorrer solo, una y otra vez, entender, planificar, actuar, comprobar y ajustar. Yo fijo antes qué significa terminado y decido al final.
+summary: "Trabajo con un agente de IA en un bucle que puede recorrer solo, una y otra vez: entender, planificar, actuar, comprobar y ajustar. Yo fijo antes qué significa terminado y decido al final."
 repo: https://github.com/NeoBmo/withIA
 symbol: loop
 afterProjects: true
