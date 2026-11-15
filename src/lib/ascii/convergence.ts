@@ -40,13 +40,13 @@ const LOGO_WIDTH = 1.1;
 const LOGO_HEIGHT = 0.8;
 const LOGO_TOP = 0.42;
 /**
- * El logo del cierre: más pequeño y en la mitad de arriba, que queda en negro.
+ * El logo del cierre: más pequeño y en la parte de arriba, entre el ruido.
  * Su dibujo acaba a esta altura de la pantalla, justo encima del título.
  */
 const CLOSING_WIDTH = 0.8;
 const CLOSING_HEIGHT = 0.6;
 const CLOSING_BOTTOM = 0.4;
-/** En el cierre, el ruido solo queda por debajo de esta franja de la pantalla. */
+/** En el cierre, el ruido solo queda por encima de esta franja; debajo, negro. */
 const CLOSING_QUIET = [0.34, 0.44] as const;
 /** Parte de la disolución que dura el viaje de cada carácter hasta el logo. */
 const LOGO_TRAVEL = 0.6;
@@ -218,7 +218,7 @@ export class Convergence {
   private travel = 0;
   private near = 0;
   // Mientras el logo se deshace, el ruido va apareciendo (0–1); en el cierre, la
-  // mitad de arriba se queda en negro (0–1). Fuera de esos tramos, -1 y 0.
+  // parte de abajo se queda en negro (0–1). Fuera de esos tramos, -1 y 0.
   private emerging = -1;
   private closing = 0;
   // El reloj del fotograma y cuánto falta para el blanco pleno: el pulso los usa.
@@ -643,10 +643,10 @@ export class Convergence {
       this.nearWeight * inside(this.nearBox, x, y, margin),
       this.farWeight * inside(this.farBox, x, y, margin),
     );
-    // En el cierre, la mitad de arriba queda en negro, como al principio.
+    // En el cierre, de la franja hacia abajo queda en negro: el ruido se queda arriba.
     quiet = Math.max(
       quiet,
-      this.closing * (1 - smoothstep(this.height * CLOSING_QUIET[0], this.height * CLOSING_QUIET[1], y)),
+      this.closing * smoothstep(this.height * CLOSING_QUIET[0], this.height * CLOSING_QUIET[1], y),
     );
     const { zones } = this;
     for (let z = 0; z < this.zoneCount * CALM_STRIDE && quiet < 1; z += CALM_STRIDE) {
