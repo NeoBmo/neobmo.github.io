@@ -28,7 +28,7 @@ import {
   WAVE_REACH,
 } from "../lib/choreography";
 import { typedAt, typingTime } from "../lib/greeting";
-import { SYMBOLS, type SymbolName } from "../lib/symbols";
+import { SYMBOLS, SYMBOL_PARTS, type SymbolName } from "../lib/symbols";
 
 const FONT_FAMILY = '"JetBrains Mono", monospace';
 /** Los teléfonos reciben menos píxeles: su pantalla ya es densa. */
@@ -157,7 +157,10 @@ export async function mountHero() {
   let hurry = false;
   // Las escenas con símbolo: cada una lo anuncia en la página.
   const scenes = [...document.querySelectorAll<HTMLElement>("[data-symbol]")];
-  const symbols = scenes.map((scene) => SYMBOLS[scene.dataset.symbol as SymbolName] ?? []);
+  const symbols = scenes.map((scene) => {
+    const name = scene.dataset.symbol as SymbolName;
+    return { art: SYMBOLS[name] ?? [], parts: SYMBOL_PARTS[name] };
+  });
   let scenery = 0;
   // El texto de cada escena: donde está, el ruido de fondo se apaga.
   const texts = [...document.querySelectorAll<HTMLElement>(".scene")];

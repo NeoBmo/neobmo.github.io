@@ -109,6 +109,20 @@ const CALM_MARGIN = 3;
 /** Valores por zona en la lista que recibe `calm`: izquierda, arriba, derecha y abajo. */
 export const CALM_STRIDE = 4;
 
+/**
+ * Pulso de los símbolos con partes: cada parte se enciende a pleno blanco durante
+ * este rato, una tras otra, como si la figura trabajara sola. En segundos.
+ */
+const PULSE_STEP = 0.9;
+/** Parte del turno de cada parte que tarda en encenderse y en apagarse. */
+const PULSE_FADE = 0.25;
+
+/** El dibujo de una escena y, si las tiene, sus partes: fila, columna y ancho. */
+export interface SymbolArt {
+  art: readonly string[];
+  parts?: readonly (readonly [number, number, number])[];
+}
+
 /** Una figura hecha de caracteres: el carácter `order[j]` va a la posición `j`. */
 interface Formation {
   x: Float32Array;
@@ -120,6 +134,10 @@ interface Formation {
   scale: number;
   /** Rectángulo que ocupa: izquierda, arriba, derecha y abajo. */
   box: readonly [number, number, number, number];
+  /** Parte a la que pertenece cada posición, desde 1; 0 si a ninguna. */
+  part: Uint8Array;
+  /** Cuántas partes tiene. */
+  parts: number;
 }
 
 export interface ConvergenceOptions {
@@ -193,6 +211,9 @@ export class Convergence {
   // de ruido calculado.
   private travel = 0;
   private near = 0;
+  // El reloj del fotograma y cuánto falta para el blanco pleno: el pulso los usa.
+  private clock = 0;
+  private boost = 1;
   // Lo lejos (0–1) que está ese mismo carácter del borde por el que da la vuelta.
   private seam = 1;
   // Las dos figuras del fotograma también apartan el ruido, cada una con su peso.
@@ -232,7 +253,7 @@ export class Convergence {
     /** Agranda los caracteres: menos que dibujar en equipos que no llegan. */
     glyphScale = 1,
     /** Arte ASCII de cada escena que sigue al horizonte, en orden. */
-    symbols: readonly (readonly string[])[] = [],
+    symbols: readonly SymbolArt[] = [],
     portrait = false,
   ) {
     this.field = painting.field;
@@ -328,6 +349,9 @@ export class Convergence {
     const total = Math.max(start.size, end.size, this.alive);
     const stirred = this.force > 0 || this.sway !== 0 || this.waveCount > 0;
     const faint = this.ambientAlpha();
+    this.clock = time;
+    // Lo que falta para el blanco pleno depende de cuánto esté atenuado el lienzo.
+    this.boost = 1 / Math.max(this.opacity, 0.01);
     this.nearBox = start.box;
     this.nearWeight = 1 - mix;
     this.farBox = end.box;
@@ -355,8 +379,10 @@ export class Convergence {
         alpha =
           lerp(faint * this.depthAlpha() * this.clearAt(x, y), 1, formed) *
           lerp(this.seam, 1, smoothstep(SEAM_CLEAR, 1, formed));
-        if (formed > 0.9) glyph = shape.glyph[j];
-        else if (formed < 0.1) glyph = this.ambientGlyph(n, time);
+        if (formed > 0.9) {
+          glyph = shape.glyph[j];
+          alpha *= this.glow(shape, j);
+        } else if (formed < 0.1) glyph = this.ambientGlyph(n, time);
         else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
       } else if (j < this.alive && !inStart) {
         this.ambientAt(n, time);
@@ -371,21 +397,27 @@ export class Convergence {
         x = lerp(start.x[j], end.x[j], local);
         y = lerp(start.y[j], end.y[j], local);
         scale = lerp(start.scale, end.scale, local);
-        if (local < 0.1) glyph = start.glyph[j];
-        else if (local > 0.9) glyph = end.glyph[j];
-        else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
+        if (local < 0.1) {
+          glyph = start.glyph[j];
+          alpha = this.glow(start, j);
+        } else if (local > 0.9) {
+          glyph = end.glyph[j];
+          alpha = this.glow(end, j);
+        } else glyph = NOISE_INDEX[(flicker + ((this.noise[n] * 997) | 0)) % NOISE_INDEX.length];
       } else if (inStart) {
         if (mix > this.fade[n]) continue;
         x = start.x[j];
         y = start.y[j];
         glyph = start.glyph[j];
         scale = start.scale;
+        alpha = this.glow(start, j);
       } else {
         if (mix < 1 - this.fade[n]) continue;
         x = end.x[j];
         y = end.y[j];
         glyph = end.glyph[j];
         scale = end.scale;
+        alpha = this.glow(end, j);
       }
 
       if (stirred) {
@@ -553,6 +585,20 @@ export class Convergence {
   /** Fija la opacidad del próximo dibujo, para que el texto de encima se lea. */
   dim(alpha: number) {
     this.opacity = alpha;
+  }
+
+  /**
+   * Cuánto más brilla la posición `j` de una figura: sus partes se encienden por
+   * turnos y, mientras una está encendida, llega al blanco pleno.
+   */
+  private glow(shape: Formation, j: number) {
+    const part = shape.part[j];
+    if (!part) return 1;
+    // En qué punto del turno de esta parte va el pulso: de 0 a 1 mientras le toca.
+    const turn = (((this.clock / PULSE_STEP - (part - 1)) % shape.parts) + shape.parts) % shape.parts;
+    if (turn >= 1) return 1;
+    const lit = smoothstep(0, PULSE_FADE, turn) * (1 - smoothstep(1 - PULSE_FADE, 1, turn));
+    return lerp(1, this.boost, lit);
   }
 
   /** El ruido se ve igual de tenue esté como esté atenuado el lienzo entero. */
@@ -747,7 +793,7 @@ export class Convergence {
    */
   private buildFormations(
     logo: HTMLImageElement,
-    symbols: readonly (readonly string[])[],
+    symbols: readonly SymbolArt[],
     portrait: boolean,
     pixelRatio: number,
   ) {
@@ -788,7 +834,7 @@ export class Convergence {
     this.formations = [
       this.logoFormation(logo, LOGO_WIDTH, LOGO_HEIGHT, LOGO_TOP),
       emptyFormation(),
-      ...symbols.map((art) => this.artFormation(art, portrait, pixelRatio)),
+      ...symbols.map((symbol) => this.artFormation(symbol, portrait, pixelRatio)),
       this.logoFormation(logo, CLOSING_WIDTH, CLOSING_HEIGHT, CLOSING_TOP),
     ];
 
@@ -818,7 +864,7 @@ export class Convergence {
   }
 
   /** Convierte un dibujo de arte ASCII en figura: cada carácter ocupa su celda. */
-  private artFormation(art: readonly string[], portrait: boolean, pixelRatio: number): Formation {
+  private artFormation({ art, parts = [] }: SymbolArt, portrait: boolean, pixelRatio: number): Formation {
     const { width, height, count } = this;
     const box = portrait ? SYMBOL_TALL : SYMBOL_WIDE;
     const rows = art.length;
@@ -845,6 +891,7 @@ export class Convergence {
     const x = new Float32Array(count);
     const y = new Float32Array(count);
     const glyph = new Uint8Array(count);
+    const part = new Uint8Array(count);
     let size = 0;
 
     for (let row = 0; row < rows; row++) {
@@ -854,11 +901,13 @@ export class Convergence {
         x[size] = left + (col + 0.5) * cellWidth;
         y[size] = top + (row + 0.5) * cellHeight;
         glyph[size] = index;
+        part[size] =
+          parts.findIndex(([at, from, wide]) => at === row && col >= from && col < from + wide) + 1;
         size++;
       }
     }
 
-    return { x, y, size, glyph, scale, box: boxOf(x, y, size) };
+    return { x, y, size, glyph, scale, box: boxOf(x, y, size), part, parts: parts.length };
   }
 
   /** Convierte en celdas lo que `draw` pinta en una capa del tamaño de la figura. */
@@ -900,7 +949,7 @@ export class Convergence {
       }
     }
 
-    return { x, y, size, glyph, scale, box: boxOf(x, y, size) };
+    return { x, y, size, glyph, scale, box: boxOf(x, y, size), part: new Uint8Array(count), parts: 0 };
   }
 
   /** Deja en `atX`/`atY` el punto del viaje de la pintura al logo. */
@@ -954,6 +1003,8 @@ const emptyFormation = (): Formation => ({
   glyph: new Uint8Array(0),
   scale: 1,
   box: NO_BOX,
+  part: new Uint8Array(0),
+  parts: 0,
 });
 
 /** Rectángulo que ocupan las primeras `size` posiciones. */

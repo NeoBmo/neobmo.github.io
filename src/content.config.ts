@@ -35,8 +35,6 @@ const sections = defineCollection({
     summary: z.string(),
     /** Etiqueta breve sobre el título. */
     kicker: z.string().optional(),
-    /** Pasos de un recorrido, en orden. */
-    steps: z.array(z.string()).default([]),
     repo: z.url().optional(),
     /** Figura que forman los caracteres del lienzo al llegar a la sección. */
     symbol: z.enum(SYMBOL_NAMES).optional(),
