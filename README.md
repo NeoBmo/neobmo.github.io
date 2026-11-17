@@ -81,7 +81,7 @@ Los campos de cada colección están en `src/content.config.ts`. Una sección o 
 ## Recursos generados
 
 - **Pintura.** `npm run prepare:painting <imagen>` genera, desde una reproducción de *La noche estrellada*, la versión horizontal y una reinterpretación vertical para teléfonos. Cada pantalla descarga solo la que necesita.
-- **Imagen para compartir.** `npm run prepare:share` genera `public/share.png` (1200×630) a partir del logo: es la vista previa del enlace en LinkedIn, WhatsApp y similares.
+- **Imagen para compartir.** `npm run prepare:share` genera `src/assets/share.png` (1200×630): el logo a la izquierda y los caracteres del lienzo formando *La noche estrellada*. Es la vista previa del enlace en LinkedIn, WhatsApp y similares. Se regenera a mano y se commitea; Astro le pone un hash al nombre, así que cada versión tiene una URL nueva y las redes no muestran la vieja.
 
 ## Despliegue
 
