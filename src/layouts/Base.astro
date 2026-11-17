@@ -1,7 +1,9 @@
 ---
 import "../styles/global.css";
 import fontUrl from "../assets/fonts/jetbrains-mono.woff2?url";
-import { href } from "../lib/url";
+// Importada (no en public/): Astro le pone un hash al nombre, así que cada
+// versión nueva tiene otra URL y WhatsApp o LinkedIn no muestran la vieja.
+import share from "../assets/share.png";
 
 interface Props {
   title?: string;
@@ -19,7 +21,7 @@ const {
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const base = import.meta.env.BASE_URL;
 // La imagen de las vistas previas: los servicios la piden con dirección completa.
-const share = new URL(href("share.png"), Astro.site);
+const shareUrl = new URL(share.src, Astro.site);
 ---
 
 <!doctype html>
@@ -31,8 +33,8 @@ const share = new URL(href("share.png"), Astro.site);
     <meta name="description" content={description} />
     <meta name="author" content="Luis Rodríguez" />
     <meta name="theme-color" content="#000000" />
-    {noindex && <meta name="robots" content="noindex" />}
-    <link rel="canonical" href={canonical} />
+    {/* Una página fuera del índice no declara versión canónica: serían señales opuestas. */}
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
     <link rel="icon" href={`${base.replace(/\/?$/, "/")}favicon.svg`} type="image/svg+xml" />
     <link rel="preload" href={fontUrl} as="font" type="font/woff2" crossorigin />
     <meta property="og:type" content="website" />
@@ -41,11 +43,19 @@ const share = new URL(href("share.png"), Astro.site);
     <meta property="og:url" content={canonical} />
     <meta property="og:locale" content="es_CO" />
     <meta property="og:site_name" content="NeoBmo" />
-    <meta property="og:image" content={share} />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Logo de NeoBmo: una barra inclinada, una barra y un círculo" />
+    <meta property="og:image" content={shareUrl} />
+    <meta property="og:image:type" content={`image/${share.format}`} />
+    <meta property="og:image:width" content={String(share.width)} />
+    <meta property="og:image:height" content={String(share.height)} />
+    <meta
+      property="og:image:alt"
+      content="Logo de NeoBmo junto a La noche estrellada dibujada con caracteres de terminal"
+    />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={shareUrl} />
+    <slot name="head" />
   </head>
   <body>
     <slot />
