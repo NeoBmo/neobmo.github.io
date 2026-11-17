@@ -10,7 +10,8 @@ import { getEntry } from "astro:content";
 // Datos estructurados para Google: quién es el autor y dónde más está. Los
 // perfiles salen de la sección de contacto, para no repetirlos aquí.
 const contact = await getEntry("sections", "contacto");
-const home = new URL(import.meta.env.BASE_URL, Astro.site).href;
+// Con barra final, igual que el canonical y el sitemap.
+const home = new URL(import.meta.env.BASE_URL.replace(/\/?$/, "/"), Astro.site).href;
 const schema = {
   "@context": "https://schema.org",
   "@graph": [
