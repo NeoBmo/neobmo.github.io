@@ -1,5 +1,6 @@
-<section class="hero" aria-labelledby="hero-title">
+<section class="hero" aria-labelledby="hero-title" data-stop>
   <h1 id="hero-title" class="visually-hidden">Luis Rodríguez — NeoBmo</h1>
+  <p class="hero__credit"><cite>La noche estrellada</cite> · Vincent van Gogh, 1889</p>
 </section>
 
 <script is:inline>
@@ -21,15 +22,53 @@
 </script>
 
 <style>
-  /* La intro ocurre en el lienzo fijo, sobre la primera escena: el hero no ocupa
-     sitio. Sin movimiento sí: es la pantalla de la pintura fija. */
+  /* Sin script no hay lienzo que mirar: el hero no ocupa sitio. Con la intro en
+     marcha, y sin movimiento, es la pantalla de la pintura: la primera parada, a
+     la que se vuelve subiendo desde «Sobre mí». */
   .hero {
+    position: relative;
     height: 0;
+    overflow: hidden;
+  }
+
+  :global(html[data-stage]) .hero {
+    height: 100svh;
   }
 
   @media (prefers-reduced-motion: reduce) {
     .hero {
       height: 100svh;
+    }
+  }
+
+  /* El pie de la obra, como en una sala: solo cuando la pintura se puede mirar. */
+  .hero__credit {
+    position: absolute;
+    bottom: var(--space-gutter);
+    left: 50%;
+    margin: 0;
+    padding: 0.2em 0.6em;
+    font-size: var(--text-sm);
+    max-width: calc(100% - 2 * var(--space-gutter));
+    color: var(--color-dim);
+    text-align: center;
+    background: var(--color-void);
+    transform: translateX(-50%);
+    visibility: hidden;
+  }
+
+  .hero__credit cite {
+    font-style: normal;
+    color: var(--color-signal);
+  }
+
+  :global(html[data-stage="open"]) .hero__credit {
+    visibility: visible;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero__credit {
+      visibility: visible;
     }
   }
 </style>

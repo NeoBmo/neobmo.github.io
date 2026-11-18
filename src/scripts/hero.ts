@@ -2,10 +2,11 @@ import logoUrl from "../assets/logo.svg?url";
 import { loadImageField, type ImageField } from "../lib/ascii/image-field";
 import { PAINTINGS, PORTRAIT_QUERY } from "../lib/painting";
 import { CALM_STRIDE, Convergence, WAVE_STRIDE, type Painting } from "../lib/ascii/convergence";
-import { clamp, lerp, smoothstep } from "../lib/ascii/math";
+import { clamp, easeInOutCubic, lerp, smoothstep } from "../lib/ascii/math";
 import {
   AMBIENT_FRAME_MS,
   AMBIENT_REST_MS,
+  ARRIVAL_DURATION,
   DISSOLVE_DURATION,
   DISSOLVE_START,
   FINALE_HOLD,
@@ -146,6 +147,17 @@ export async function mountHero() {
   // La página se abre cuando el logo se ha deshecho; la terminal acaba después.
   const introEnd = releaseAt + RELEASE_DURATION;
   const typedBy = greetingAt + (strokes.at(-1)?.at ?? 0);
+  // Después, la vista baja sola de la pintura a «Sobre mí». La pintura se queda
+  // arriba, en su propia parada: subir la vuelve a formar.
+  const hero = document.querySelector<HTMLElement>(".hero");
+  const about = opening?.closest<HTMLElement>(".scene");
+  const arrivalEnd = introEnd + ARRIVAL_DURATION;
+  let arrivalTop = 0;
+  let introShift = 0;
+  // De 0 a 1: cuánto se ve la parada de la pintura, y cuánto está formada.
+  let gallery = 0;
+  let shown = 0;
+  let drawnShown = -1;
   let typed = false;
   let stage = root.dataset.stage ?? "";
   // Un gesto durante la intro no desplaza la página: la acelera.
@@ -207,13 +219,15 @@ export async function mountHero() {
   const draw = () => {
     drawnPosition = position;
     drawnVeil = veil;
+    drawnShown = shown;
     drawnStirred = force > 0 || sway !== 0 || waveCount > 0;
     scene.dim(reducedMotion.matches ? 1 : lerp(1, HORIZON_ALPHA, veil));
     if (reducedMotion.matches) return scene.render(elapsed, true);
     scene.disturb(pointerX, pointerY, force, sway, waves, waveCount);
     scene.drift(window.scrollY);
     // Desde el logo mandan las figuras, con el ruido de fondo alrededor.
-    if (position >= 1) scene.renderFormation(position - 1, elapsed);
+    if (position >= 1 && shown > 0) scene.renderGallery(elapsed, shown);
+    else if (position >= 1) scene.renderFormation(position - 1, elapsed);
     else scene.render(elapsed, false, position);
   };
 
@@ -258,8 +272,9 @@ export async function mountHero() {
     root.dataset.hero = "";
     // Si el seguro ya la abrió, la intro no vuelve a cerrarla: se da por vista.
     if (!reducedMotion.matches && !root.dataset.stage) {
-      stage = "";
-      elapsed = introEnd;
+      // Sin `data-stage` el hero no ocupa sitio: no hay parada ni bajada.
+      stage = "open";
+      elapsed = arrivalEnd;
       finishTyping();
     }
     canvas.dataset.ready = "";
@@ -284,8 +299,17 @@ export async function mountHero() {
       typed = elapsed >= typedBy;
     }
     if (stage !== "open") {
-      setStage(elapsed < greetingAt ? "intro" : elapsed < introEnd ? "greeting" : "open");
+      setStage(
+        elapsed < greetingAt
+          ? "intro"
+          : elapsed < introEnd
+            ? "greeting"
+            : elapsed < arrivalEnd && (hero?.offsetHeight ?? 0) > 0
+              ? "arrival"
+              : "open",
+      );
     }
+    if (stage === "arrival") arrive();
 
     const dissolve = clamp((elapsed - DISSOLVE_START) / DISSOLVE_DURATION);
     const release = clamp((elapsed - releaseAt) / RELEASE_DURATION);
@@ -293,7 +317,13 @@ export async function mountHero() {
     // del cierre. La pintura no vuelve: es solo del principio.
     const journey = release + (introRunning ? 0 : scenery + finale);
     const target = dissolve + journey;
-    const veilTarget = release * (1 - finale);
+    // En la parada de la pintura no hay texto encima: se ve con todo su brillo.
+    const veilTarget = release * (1 - finale) * (1 - gallery);
+    // La pintura solo vuelve desde el ruido: si aún queda un símbolo por deshacer,
+    // espera a que se deshaga.
+    const shownTarget = position <= 2.001 ? gallery : 0;
+    shown += (shownTarget - shown) * Math.min(delta * STAGE_RESPONSE, 1);
+    if (Math.abs(shownTarget - shown) < 0.001) shown = shownTarget;
 
     // La intro va exacta al reloj; después los caracteres persiguen al scroll,
     // así que incluso un salto brusco, en cualquier sentido, viaja suave.
@@ -334,16 +364,22 @@ export async function mountHero() {
 
     // Mientras el visitante lo altera, o justo después, hay que redibujar aunque
     // la figura no haya cambiado.
-    if (position === drawnPosition && veil === drawnVeil && !stirred && !drawnStirred) {
+    if (position === drawnPosition && veil === drawnVeil && shown === drawnShown && !stirred && !drawnStirred) {
       if (position >= 1) {
         // Figura quieta y en su destino: solo queda el ruido de fondo, que se dibuja
         // despacio. Tras un rato sin gestos, el bucle se detiene hasta el próximo.
         // El primer fotograma tras reanudar no mide tiempo: se espera al siguiente
         // para que el gesto que lo despertó llegue a notarse.
         const settled =
-          !introRunning && position === target && veil === veilTarget && delta > 0 && !stirring;
+          !introRunning &&
+          position === target &&
+          veil === veilTarget &&
+          shown === shownTarget &&
+          delta > 0 &&
+          !stirring;
         if (settled && now - lastInput > AMBIENT_REST_MS) return pause();
-        if (now - lastDraw < AMBIENT_FRAME_MS) return;
+        // La pintura respira a pleno ritmo; el ruido solo, despacio.
+        if (shown === 0 && now - lastDraw < AMBIENT_FRAME_MS) return;
       }
     }
 
@@ -440,7 +476,17 @@ export async function mountHero() {
   /** Cambia de tramo de la intro. Al abrirse la página, el texto ya ocupa su sitio. */
   function setStage(next: string) {
     if (next === stage) return;
+    const was = stage;
     stage = next;
+    // Hasta dónde baja la vista: el principio de «Sobre mí».
+    if (next === "arrival") {
+      arrivalTop = about ? Math.round(about.getBoundingClientRect().top + window.scrollY) : 0;
+    }
+    // El último fotograma de la bajada puede saltarse: se termina exacta.
+    if (was === "arrival") {
+      window.scrollTo(0, arrivalTop);
+      opening?.style.setProperty("--intro-shift", "0px");
+    }
     if (next) root.dataset.stage = next;
     else delete root.dataset.stage;
     if (next !== "open") return;
@@ -456,7 +502,19 @@ export async function mountHero() {
     const box = terminal.getBoundingClientRect();
     const applied = new DOMMatrix(getComputedStyle(opening).transform).m42;
     const middle = box.top - applied + box.height / 2;
-    opening.style.setProperty("--intro-shift", `${Math.round(window.innerHeight / 2 - middle)}px`);
+    introShift = Math.round(window.innerHeight / 2 - middle);
+    opening.style.setProperty("--intro-shift", `${introShift}px`);
+  }
+
+  /**
+   * La bajada: el scroll y la terminal se mueven con la misma curva, así que la
+   * línea viaja sin saltos desde el centro de la pantalla hasta su sitio.
+   */
+  function arrive() {
+    if (!opening) return;
+    const progress = easeInOutCubic(clamp((elapsed - introEnd) / ARRIVAL_DURATION));
+    window.scrollTo(0, arrivalTop * progress);
+    opening.style.setProperty("--intro-shift", `${Math.round(introShift * (1 - progress))}px`);
   }
 
   /** La terminal muestra ya su última toma, sin escribirla. */
@@ -470,6 +528,9 @@ export async function mountHero() {
   const follow = () => {
     following = 0;
     scenery = sceneAt();
+    // La parada de la pintura cuenta desde que la vista llegó a «Sobre mí».
+    const top = hero?.offsetHeight ?? 0;
+    gallery = stage === "open" && top > 0 ? 1 - clamp(window.scrollY / top) : 0;
     const screen = window.innerHeight;
     const entered = ending && screen > 0 ? 1 - ending.getBoundingClientRect().top / screen : 0;
     finale = smoothstep(FINALE_HOLD, 1, entered);
