@@ -49,6 +49,8 @@
     margin: 0;
     padding: 0.2em 0.6em;
     font-size: var(--text-sm);
+    /* Con `left: 50%`, el ancho se mediría contra la mitad libre: se fija al texto. */
+    width: max-content;
     max-width: calc(100% - 2 * var(--space-gutter));
     color: var(--color-dim);
     text-align: center;
