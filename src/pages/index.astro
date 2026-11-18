@@ -6,6 +6,7 @@ import Projects from "../components/Projects.astro";
 import Sections from "../components/Sections.astro";
 import Waypoints from "../components/Waypoints.astro";
 import { getEntry } from "astro:content";
+import { LANDSCAPE_QUERY, PAINTINGS, PORTRAIT_QUERY } from "../lib/painting";
 
 // Datos estructurados para Google: quién es el autor y dónde más está. Los
 // perfiles salen de la sección de contacto, para no repetirlos aquí.
@@ -29,6 +30,12 @@ const schema = {
 ---
 
 <Base>
+  {/*
+    La pintura se pide al leer el HTML, a la vez que el JS y la fuente; si no,
+    la pide el hero cuando ya cargó todo lo demás. Sólo baja la que encaja.
+  */}
+  <link slot="head" rel="preload" as="image" type="image/webp" href={PAINTINGS.portrait.url} media={PORTRAIT_QUERY} />
+  <link slot="head" rel="preload" as="image" type="image/webp" href={PAINTINGS.landscape.url} media={LANDSCAPE_QUERY} />
   <script is:inline slot="head" type="application/ld+json" set:html={JSON.stringify(schema)} />
   <Backdrop />
   <Waypoints />

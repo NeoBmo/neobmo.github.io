@@ -5,4 +5,7 @@ import { defineConfig } from "astro/config";
 export default defineConfig({
   site: process.env.SITE_URL ?? "https://neobmo.github.io",
   base: process.env.BASE_PATH ?? "/",
+  // El CSS es pequeño (~2 KB): dentro del HTML se ahorra una petición que
+  // bloquea el primer pintado, que en una red lenta cuesta segundos.
+  build: { inlineStylesheets: "always" },
 });

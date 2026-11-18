@@ -1,7 +1,6 @@
-import landscapeUrl from "../assets/starry-night.webp?url";
-import portraitUrl from "../assets/starry-night-portrait.webp?url";
 import logoUrl from "../assets/logo.svg?url";
 import { loadImageField, type ImageField } from "../lib/ascii/image-field";
+import { PAINTINGS, PORTRAIT_QUERY } from "../lib/painting";
 import { CALM_STRIDE, Convergence, WAVE_STRIDE, type Painting } from "../lib/ascii/convergence";
 import { clamp, lerp, smoothstep } from "../lib/ascii/math";
 import {
@@ -90,19 +89,11 @@ const MAX_CALM = 3;
 /** Un clic aquí ya tiene su propio efecto: no lanza onda. */
 const INTERACTIVE = "a, button, input, select, textarea, summary, label, dialog";
 
-/** Below this aspect ratio the vertical composition fits better. */
-const PORTRAIT_QUERY = "(max-aspect-ratio: 6/7)";
-
-const VARIANTS = {
-  landscape: { url: landscapeUrl, focus: { x: 0.4, y: 0.5 } },
-  portrait: { url: portraitUrl, focus: { x: 0.5, y: 0.5 } },
-};
-
 const fields = new Map<string, Promise<ImageField>>();
 
 /** Each variant is fetched only when a screen of that shape needs it. */
 async function paintingFor(portrait: boolean): Promise<Painting> {
-  const { url, focus } = VARIANTS[portrait ? "portrait" : "landscape"];
+  const { url, focus } = PAINTINGS[portrait ? "portrait" : "landscape"];
   if (!fields.has(url)) {
     const field = loadImageField(url);
     // Una descarga fallida no se guarda: el siguiente intento vuelve a pedirla.
