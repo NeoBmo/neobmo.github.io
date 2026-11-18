@@ -134,7 +134,8 @@ const year = new Date().getFullYear();
     /* Durante la intro el bloque espera con la terminal en el centro de la
        pantalla, y solo se ve ella. */
     :global(html[data-stage="intro"]) .opening,
-    :global(html[data-stage="greeting"]) .opening {
+    :global(html[data-stage="greeting"]) .opening,
+    :global(html[data-stage="arrival"]) .opening {
       transform: translateY(var(--intro-shift, 0px));
       transition: none;
     }

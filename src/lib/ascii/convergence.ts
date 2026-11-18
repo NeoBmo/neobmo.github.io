@@ -10,13 +10,13 @@ import { clamp, createRandom, easeInOutCubic, easeOutCubic, lerp, smoothstep } f
  */
 const TIMING = {
   revealStart: 0.05,
-  reveal: 1.9,
-  departure: 0.7,
-  stagger: 0.9,
-  travel: 1.3,
-  colorStart: 2,
+  reveal: 1.4,
+  departure: 0.6,
+  stagger: 0.8,
+  travel: 1.1,
+  colorStart: 1.6,
   colorDuration: 0.9,
-  lifeStart: 2.6,
+  lifeStart: 2.2,
   lifeDuration: 1,
 };
 /**
@@ -48,6 +48,11 @@ const CLOSING_HEIGHT = 0.6;
 const CLOSING_BOTTOM = 0.4;
 /** En el cierre, el ruido solo queda por encima de esta franja; debajo, negro. */
 const CLOSING_QUIET = [0.34, 0.44] as const;
+/**
+ * Al volver a la pintura, hasta qué punto del camino esperan los últimos en
+ * empezar: con 0,6, cada carácter tarda el 40 % del recorrido en llegar.
+ */
+const GALLERY_SPREAD = 0.6;
 /** Parte de la disolución que dura el viaje de cada carácter hasta el logo. */
 const LOGO_TRAVEL = 0.6;
 /** Curvatura del viaje: sale siguiendo su pincelada antes de ir al logo. */
@@ -449,6 +454,74 @@ export class Convergence {
     }
 
     this.renderer.draw(batch, filled / GLYPH_STRIDE, 0, this.opacity);
+  }
+
+  /**
+   * La pintura de vuelta, después de la intro: `emerge` (0–1) la forma desde el
+   * ruido de fondo, sin pasar por el logo. Cada carácter del ruido viaja a su sitio
+   * en la pintura; el resto aparece en el suyo, cada uno a su turno. En 0 se ve
+   * exactamente el ruido de la primera parada, así que el paso no tiene costura.
+   */
+  renderGallery(time: number, emerge: number) {
+    const { batch } = this;
+    const { cellWidth } = this.atlas;
+    const flicker = Math.floor(time * 12);
+    const stirred = this.force > 0 || this.sway !== 0 || this.waveCount > 0;
+    const faint = this.ambientAlpha();
+    // Sin figuras de por medio: el ruido solo respeta el texto de la página.
+    this.emerging = -1;
+    this.closing = 0;
+    this.nearWeight = 0;
+    this.farWeight = 0;
+    let filled = 0;
+
+    for (let i = 0; i < this.count; i++) {
+      const from = this.fade[i] * GALLERY_SPREAD;
+      const formed = easeInOutCubic(clamp((emerge - from) / (1 - GALLERY_SPREAD)));
+      const wanders = this.ambient[i] === 1;
+      if (!wanders && formed <= 0) continue;
+
+      // En su sitio, la pintura respira a lo largo de su pincelada, como en la intro.
+      const wave = Math.sin(this.phase[i] - time * 1.4) * formed;
+      const drift = wave * 0.2 * cellWidth;
+      let x = this.homeX[i] + this.dirX[i] * drift;
+      let y = this.homeY[i] + this.dirY[i] * drift;
+      let scale = 1;
+      let alpha = formed;
+      let glyph: number;
+
+      if (wanders) {
+        this.ambientAt(i, time);
+        x = lerp(this.atX, x, formed);
+        y = lerp(this.atY, y, formed);
+        scale = lerp(lerp(DEPTH_SCALE[0], DEPTH_SCALE[1], this.near), 1, formed);
+        alpha =
+          lerp(faint * this.depthAlpha() * this.clearAt(x, y), 1, formed) *
+          lerp(this.seam, 1, smoothstep(SEAM_CLEAR, 1, formed));
+      }
+
+      if (formed > 0.9) {
+        glyph = glyphFor(this.luminance[i] + wave * 0.09 * this.coherence[i], this.angle[i], this.coherence[i]);
+      } else if (wanders && formed < 0.1) glyph = this.ambientGlyph(i, time);
+      else glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
+
+      if (stirred) {
+        const strength = this.pushAt(x, y, i, this.dirX[i], this.dirY[i]);
+        x += this.pushX;
+        y += this.pushY;
+        if (strength > POINTER_NOISE) glyph = NOISE_INDEX[(flicker + ((this.noise[i] * 997) | 0)) % NOISE_INDEX.length];
+      }
+
+      if (glyph === EMPTY || alpha < 0.01) continue;
+      batch[filled++] = x;
+      batch[filled++] = y;
+      batch[filled++] = glyph;
+      batch[filled++] = scale;
+      batch[filled++] = alpha;
+    }
+
+    // El color llega con la figura: mientras es ruido, apenas se tiñe.
+    this.renderer.draw(batch, filled / GLYPH_STRIDE, emerge, this.opacity);
   }
 
   /**

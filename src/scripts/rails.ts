@@ -79,7 +79,7 @@ export function mountRails() {
    */
   const reading = () =>
     document.querySelector("dialog[open]") !== null ||
-    ["intro", "greeting"].includes(document.documentElement.dataset.stage ?? "");
+    ["intro", "greeting", "arrival"].includes(document.documentElement.dataset.stage ?? "");
 
   let lockedUntil = 0;
   let lastWheel = 0;

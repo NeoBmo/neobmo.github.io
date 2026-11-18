@@ -70,9 +70,16 @@ a {
 
 /* Durante la intro la página no se desplaza: la obra se presenta sola. */
 html[data-stage="intro"],
-html[data-stage="greeting"] {
+html[data-stage="greeting"],
+html[data-stage="arrival"] {
   overflow: hidden;
   touch-action: none;
+}
+
+/* La bajada a «Sobre mí» la lleva el script, fotograma a fotograma: el encaje no
+   debe tirar de ella hacia una parada a medio camino. */
+html[data-stage="arrival"] {
+  scroll-snap-type: none;
 }
 
 /* Una escena ocupa la pantalla: da recorrido al lienzo y sitio a su símbolo. */
