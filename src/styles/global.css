@@ -140,6 +140,7 @@ html[data-stage="greeting"] {
 }
 
 /* La misma frontera que usa el lienzo: en vertical el símbolo va arriba y el texto abajo. */
+/* Mismo valor que PORTRAIT_QUERY en src/lib/painting.ts. */
 @media (max-aspect-ratio: 6/7) {
   .scene[data-symbol] {
     justify-content: flex-end;
