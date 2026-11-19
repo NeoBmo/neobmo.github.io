@@ -1,34 +1,44 @@
-# NeoBmo Portfolio
+<p align="center">
+  <img src="assets/banner.svg" width="100%" alt="El logo \|° en rosa sobre negro, junto a «NeoBmo, portafolio v6 · React + GSAP» y una etiqueta «archivado».">
+</p>
 
-**Version:** 6.2  
-**Status:** In development
+# NeoBmo · portafolio v6
 
-Frontend portfolio focused on visual experience, cinematic motion, and a dark technical minimalist design language. The project is built as an interactive web experience, not as a static presentation or generic portfolio template.
+**La versión 6 de mi portafolio, en React y GSAP. Ya no es la actual.** La v7 es una
+página coreografiada en caracteres, hecha con Astro:
+[neobmo.github.io](https://neobmo.github.io) ·
+[su código](https://github.com/NeoBmo/neobmo.github.io).
 
-## Tech Stack
+> [!NOTE]
+> Sin commits desde el 2026-05-26 y sin publicar. Queda como registro de la v6, no
+> como proyecto activo.
 
-- React
-- Vite
-- GSAP
-- TailwindCSS
-- OGL / Three.js
-- ESLint
+## Qué era
 
-## Project Philosophy
+Una sola página oscura (`#050505`), con un único acento rosa (`#fb64b6`) y
+JetBrains Mono en todo el texto. Cuatro vistas en `src/views/`: Hero, About, Skills
+y Contact. El movimiento iba con GSAP, y los fondos animados con WebGL: `Silk` y
+`Antigravity` con Three.js, `Particles` con OGL.
 
-- Dark minimalism with a restrained pink accent.
-- Controlled motion with clear visual intent.
-- Strict consistency across layout, typography, interaction, and motion.
-- Performance treated as a design constraint from the start.
-- Custom visual decisions over generic template patterns.
+<!-- TODO: captura de la portada de la v6. Compilar el último commit con `npm run build`, servir `dist/` y capturar a 1280 px y a 375 px. -->
 
-## Development Status
+## Arrancarla en local
 
-This project is in active development. Structure, motion details, visual composition, and performance decisions may continue to evolve before a stable final version.
+| Comando | Qué hace |
+|---|---|
+| `npm install` | Instala las dependencias |
+| `npm run dev` | Servidor de desarrollo de Vite |
+| `npm run build` | Genera el sitio en `dist/` |
+| `npm run lint` | Revisa el código con ESLint |
 
-## Technical Notes
+<details>
+<summary>Dependencias principales</summary>
 
-- Sections are organized modularly by view.
-- GSAP animations are scoped per section and cleaned up after use.
-- Heavy visual effects are limited by a performance budget.
-- Motion is designed to support the content, not compete with it.
+React 19, Vite 6, Tailwind CSS 4, GSAP 3, Three.js con `@react-three/fiber` y OGL.
+La lista completa está en `package.json`.
+
+</details>
+
+---
+
+Hecho por Luis Rodríguez · [neobmo.github.io](https://neobmo.github.io)
