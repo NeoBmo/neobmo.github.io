@@ -3,6 +3,7 @@
  * página en vez de navegar. El enlace sigue apuntando a la página de detalle,
  * que es lo que se abre sin JavaScript o en otra pestaña.
  */
+
 /**
  * Cuánto se ha recorrido del texto: el borde derecho se enciende hasta ahí y
  * los degradados avisan de lo que queda arriba o abajo. Con un píxel de margen,
