@@ -1,8 +1,10 @@
 ---
 import { getCollection, render } from "astro:content";
+import { Image } from "astro:assets";
 import Sheet from "./Sheet.astro";
 import logoUrl from "../assets/logo.svg?url";
-import { href } from "../lib/url";
+import { href, isProfile } from "../lib/url";
+import { NOISE } from "../lib/ascii/glyphs";
 
 interface Props {
   /** Qué secciones pintar: las que van antes de los proyectos o las de después. */
@@ -18,14 +20,29 @@ const sections = await Promise.all(
   entries.map(async (entry) => ({ ...entry, Content: (await render(entry)).Content })),
 );
 const year = new Date().getFullYear();
+
+/**
+ * El ruido del lienzo, quieto, detrás de la foto: se calcula al construir y
+ * siempre sale igual, así no cuesta nada en el navegador ni cambia entre visitas.
+ */
+function staticNoise(rows: number, cols: number, density: number) {
+  let seed = 7;
+  const next = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  return Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () =>
+      next() < density ? NOISE[Math.floor(next() * NOISE.length)] : " ",
+    ).join(""),
+  ).join("\n");
+}
+const photoNoise = staticNoise(13, 26, 0.2);
 ---
 
 {
   sections.map(({ id, data, body, Content }) => {
     // Solo las secciones con cuerpo tienen algo más que leer.
     const more = body?.trim() && (
-      <a href={href(id)} aria-label={`Seguir leyendo: ${data.title}`} data-sheet={`leer-${id}`}>
-        Seguir leyendo
+      <a href={href(id)} aria-label={`Continuar leyendo: ${data.title}`} data-sheet={`leer-${id}`}>
+        Continuar leyendo
       </a>
     );
 
@@ -65,7 +82,7 @@ const year = new Date().getFullYear();
             <ul class="scene__links contact" role="list">
               {data.links.map(({ label, url }) => (
                 <li>
-                  <a href={url} rel="me">
+                  <a href={url} rel={isProfile(url) ? "me" : undefined}>
                     {label}
                   </a>
                 </li>
@@ -92,6 +109,20 @@ const year = new Date().getFullYear();
         </div>
         {more && (
           <Sheet id={`leer-${id}`} title={data.title}>
+            {data.portrait && (
+              <figure class="resume-photo">
+                <span class="resume-photo__noise" aria-hidden="true">
+                  {photoNoise}
+                </span>
+                <Image
+                  src={data.portrait}
+                  alt="Foto de Luis Rodríguez"
+                  widths={[160, 320]}
+                  sizes="10rem"
+                  loading="lazy"
+                />
+              </figure>
+            )}
             <Content />
           </Sheet>
         )}
@@ -115,6 +146,14 @@ const year = new Date().getFullYear();
     font-weight: 600;
     line-height: 1.4;
     white-space: pre-wrap;
+  }
+
+  /* Bajo el saludo va lo que soy: es lo primero que se lee, no una nota al margen. */
+  .opening .scene__note {
+    margin-bottom: 0.5em;
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-dim);
   }
 
   @media (prefers-reduced-motion: no-preference) {
