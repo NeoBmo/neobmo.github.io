@@ -8,6 +8,8 @@ const { id, title } = Astro.props;
 // Más largos que cualquier pantalla: el marco los recorta a su medida.
 const ROW = "-".repeat(400);
 const COLUMN = "|\n".repeat(200);
+// La parte leída del borde: una raya gruesa por fila, como una barra de terminal.
+const FILLED = "┃\n".repeat(200);
 ---
 
 <dialog class="sheet" id={id} aria-labelledby={`${id}-title`}>
@@ -16,21 +18,37 @@ const COLUMN = "|\n".repeat(200);
     <span class="sheet__edge sheet__edge--bottom">{ROW}</span>
     <span class="sheet__edge sheet__edge--left">{COLUMN}</span>
     <span class="sheet__edge sheet__edge--right">{COLUMN}</span>
+    <!-- El borde derecho hace de barra: se enciende hasta donde se ha leído. -->
+    <span class="sheet__edge sheet__edge--right sheet__progress">{FILLED}</span>
     <span class="sheet__corner sheet__corner--top sheet__corner--left">+</span>
     <span class="sheet__corner sheet__corner--top sheet__corner--right">+</span>
     <span class="sheet__corner sheet__corner--bottom sheet__corner--left">+</span>
     <span class="sheet__corner sheet__corner--bottom sheet__corner--right">+</span>
   </div>
+  <!-- Fuera del texto que se desplaza: cerrar queda siempre a mano. -->
+  <form method="dialog" class="sheet__bar">
+    <button>[ cerrar ]</button>
+  </form>
   <div class="sheet__body" data-sheet-body>
-    <form method="dialog" class="sheet__bar">
-      <button>[ cerrar ]</button>
-    </form>
-    <h2 id={`${id}-title`}>{title}</h2>
+    <h2 id={`${id}-title`} class="sheet__title">{title}</h2>
     <slot />
   </div>
 </dialog>
 
 <style>
+  /* Registradas para que el degradado pueda aparecer poco a poco y valga 0 sin medir. */
+  @property --fade-top {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+  }
+
+  @property --fade-bottom {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+  }
+
   /* Una ventana dentro de la página: leer más no saca al visitante del recorrido. */
   .sheet {
     width: min(76ch, 100vw - 2 * var(--space-gutter));
@@ -56,24 +74,181 @@ const COLUMN = "|\n".repeat(200);
   .sheet__body {
     min-height: 0;
     /* Un carácter de margen: el texto y su barra quedan dentro del marco. */
-    margin: 1.2em 1ch;
-    padding: 1.4em clamp(0.8em, 5vw, 2.6em);
+    margin: 0 1ch 1.2em;
+    padding: 0.4em clamp(0.8em, 5vw, 2.6em) 1.4em;
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-dim) transparent;
+    /* La barra del sistema sobra: el progreso lo marca el borde del marco. */
+    scrollbar-width: none;
     /* Al llegar al final, el scroll no pasa a la página de detrás. */
     overscroll-behavior: contain;
+    /* El texto se desvanece por donde queda más: arriba si ya se bajó, abajo
+       si falta. Sin JavaScript no hay medida y no se desvanece nada. */
+    mask-image: linear-gradient(
+      transparent,
+      #000 var(--fade-top),
+      #000 calc(100% - var(--fade-bottom)),
+      transparent
+    );
   }
 
-  .sheet__body h2 {
-    margin: 0.6em 0 0.4em;
+  .sheet__body::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sheet[data-more-above] {
+    --fade-top: 2.5em;
+  }
+
+  .sheet[data-more-below] {
+    --fade-bottom: 2.5em;
+  }
+
+  /* Solo se enciende si hay algo que recorrer: hasta donde llega lo visto. */
+  .sheet__progress {
+    display: none;
+    color: var(--color-signal);
+    clip-path: inset(0 0 calc((1 - var(--progress, 0)) * 100%) 0);
+  }
+
+  .sheet[data-more-above] .sheet__progress,
+  .sheet[data-more-below] .sheet__progress {
+    display: block;
+  }
+
+  .sheet__title {
+    margin: 0 0 0.6em;
     font-size: var(--text-lg);
     line-height: 1.2;
   }
 
+  /* Jerarquía para leer por encima: el título manda, las secciones son
+     etiquetas de terminal y cada entrada abre con su nombre. El texto llega
+     de Markdown, así que estas reglas no llevan el ámbito del componente. */
+  .sheet__body :global(h2:not(.sheet__title)),
+  .sheet__body:has(:global(.resume-head)) .sheet__title {
+    margin: 2.2em 0 0.8em;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--color-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* En la hoja de vida el título es una etiqueta más: el nombre es lo que manda. */
+  .sheet__body:has(:global(.resume-head)) .sheet__title {
+    margin-top: 0;
+  }
+
+  .sheet__body :global(h2:not(.sheet__title))::before,
+  .sheet__body:has(:global(.resume-head)) .sheet__title::before {
+    content: "## ";
+  }
+
+  .sheet__body :global(h3) {
+    margin: 1.6em 0 0;
+    font-size: var(--text-base);
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  /* La etiqueta se pega a lo que encabeza: más cerca de su texto que del anterior. */
+  .sheet__body :global(h2 + :is(h3, p, ul)) {
+    margin-top: 0;
+  }
+
+  .sheet__body :global(:is(.resume-meta, .resume-tools)) {
+    margin: 0.1em 0 0.5em;
+    font-size: var(--text-sm);
+    color: var(--color-dim);
+  }
+
+  .sheet__body :global(.resume-tools) {
+    margin: 0.5em 0 0;
+  }
+
+  /* La foto abre la cabecera por la izquierda, en la misma línea que el resto
+     del texto, y el nombre se apoya a su lado. En blanco y negro, con el ruido
+     del lienzo quieto detrás de la silueta. */
+  .sheet__body :global(.resume-photo) {
+    position: relative;
+    float: left;
+    width: 9.5rem;
+    aspect-ratio: 1;
+    /* El margen de un flotante no se funde con el del título siguiente: aquí
+       va la separación que la etiqueta de abajo no puede dar. */
+    margin: 0 1.4em 1.8em 0;
+    overflow: hidden;
+  }
+
+  /* El nombre ocupa la columna que deja la foto, sin colarse debajo de ella. */
+  .sheet__body :global(.resume-head) {
+    display: flow-root;
+    padding-top: 0.6em;
+  }
+
+  .sheet__body :global(.resume-head + h2) {
+    clear: both;
+  }
+
+  /* En un celular no caben las dos columnas: la foto va encima, más grande. */
+  @media (max-width: 30rem) {
+    .sheet__body :global(.resume-photo) {
+      float: none;
+      width: 10rem;
+      margin: 0 0 1em;
+    }
+
+    .sheet__body :global(.resume-head) {
+      padding-top: 0;
+    }
+  }
+
+  .sheet__body :global(.resume-photo__noise) {
+    position: absolute;
+    inset: 0;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: var(--color-dim);
+    white-space: pre;
+  }
+
+  .sheet__body :global(.resume-photo img) {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    filter: grayscale(1) contrast(1.1);
+  }
+
+  .sheet__body :global(.resume-head p) {
+    margin: 0;
+  }
+
+  /* Bajo el nombre, lo que soy y dónde: en gris, aparte del texto que se lee. */
+  .sheet__body :global(.resume-head p:nth-child(2)) {
+    color: var(--color-dim);
+  }
+
+  .sheet__body :global(.resume-head p:first-child) {
+    margin-bottom: 0.2em;
+    font-size: var(--text-lg);
+    line-height: 1.2;
+  }
+
+  .sheet__body :global(.resume-links) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em 1.4em;
+    margin-top: 0.8em !important;
+  }
+
   .sheet__bar {
     display: flex;
+    flex: none;
     justify-content: flex-end;
+    margin: 1.2em 1ch 0;
+    padding: 0 clamp(0.8em, 5vw, 2.6em);
   }
 
   .sheet__bar button {
@@ -164,6 +339,12 @@ const COLUMN = "|\n".repeat(200);
     .sheet[open] {
       opacity: 1;
       transform: none;
+    }
+
+    .sheet__body {
+      transition:
+        --fade-top 0.2s var(--ease-out),
+        --fade-bottom 0.2s var(--ease-out);
     }
 
     @starting-style {
