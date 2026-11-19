@@ -64,6 +64,27 @@ const total = String(projects.length).padStart(2, "0");
               {data.status} · {data.strength}
             </p>
             <Content />
+            {/* Al terminar de leer, el siguiente paso está a mano sin cerrar la ventana.
+                Herramientas y enlaces salen del frontmatter, igual que en la tarjeta. */}
+            {(data.stack.length > 0 || data.site || data.repo) && (
+              <footer class="sheet-foot">
+                {data.stack.length > 0 && <p class="sheet-foot__stack">{data.stack.join(" · ")}</p>}
+                {(data.site || data.repo) && (
+                  <p class="scene__links">
+                    {data.site && (
+                      <a href={data.site} aria-label={`Ver el sitio de ${data.title}`}>
+                        Ver sitio
+                      </a>
+                    )}
+                    {data.repo && (
+                      <a href={data.repo} aria-label={`Ver el código de ${data.title}`}>
+                        Ver código
+                      </a>
+                    )}
+                  </p>
+                )}
+              </footer>
+            )}
           </Sheet>
         </article>
       ))}
@@ -87,5 +108,22 @@ const total = String(projects.length).padStart(2, "0");
     font-size: var(--text-sm);
     color: var(--color-dim);
     list-style: none;
+  }
+
+  /* El cierre de la ventana: una línea separa lo leído de lo que sigue. */
+  .sheet-foot {
+    margin-top: 2.2em;
+    padding-top: 1.2em;
+    border-top: 1px dashed var(--color-dim);
+  }
+
+  .sheet-foot__stack {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-dim);
+  }
+
+  .sheet-foot .scene__links {
+    margin-top: 1em;
   }
 </style>

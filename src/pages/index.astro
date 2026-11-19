@@ -7,6 +7,7 @@ import Sections from "../components/Sections.astro";
 import Waypoints from "../components/Waypoints.astro";
 import { getEntry } from "astro:content";
 import { LANDSCAPE_QUERY, PAINTINGS, PORTRAIT_QUERY } from "../lib/painting";
+import { isProfile } from "../lib/url";
 
 // Datos estructurados para Google: quién es el autor y dónde más está. Los
 // perfiles salen de la sección de contacto, para no repetirlos aquí.
@@ -22,8 +23,10 @@ const schema = {
       "@id": `${home}#person`,
       name: "Luis Rodríguez",
       alternateName: "NeoBmo",
+      jobTitle: "Desarrollador web",
+      knowsAbout: ["Desarrollo frontend", "React", "TypeScript", "Automatización de procesos", "IA aplicada al desarrollo"],
       url: home,
-      sameAs: contact?.data.links.map(({ url }) => url) ?? [],
+      sameAs: contact?.data.links.map(({ url }) => url).filter(isProfile) ?? [],
     },
   ],
 };

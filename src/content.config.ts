@@ -30,9 +30,11 @@ const projects = defineCollection({
 
 const sections = defineCollection({
   loader: glob({ pattern: "*.md", base: "./src/content/sections" }),
-  schema: z.object({
+  schema: ({ image }) => z.object({
     title: z.string(),
     summary: z.string(),
+    /** Foto que acompaña al texto completo, en su ventana de lectura. */
+    portrait: image().optional(),
     /** Etiqueta breve sobre el título. */
     kicker: z.string().optional(),
     repo: z.url().optional(),
